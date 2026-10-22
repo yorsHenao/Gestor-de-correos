@@ -175,3 +175,5 @@ Sin estos, el programa no arranca. Van en los grupos del `.env` con el mismo nom
 - `scripts/`: clasificar, RT, Slack, Entes, Lupe y las cartas.
 - `data-json/`: los textos de los motivos y el archivo que los une con Lupe. También van aquí las credenciales, que no vienen en la copia.
 - `formatos/`: las cinco cartas para subir a Drive.
+
+© 2026 Jeisembert Yors Castiblanco Henao. Todos los derechos reservados.
