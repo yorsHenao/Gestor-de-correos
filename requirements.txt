@@ -1,0 +1,21 @@
+# Dependencias del Proyecto E (pip install -r requirements.txt)
+python-dotenv==1.2.2
+google-api-python-client==2.196.0
+google-auth==2.52.0
+google-auth-httplib2==0.4.0
+google-auth-oauthlib==1.4.0
+google-genai==2.9.0
+groq==1.2.0
+slack_sdk==3.41.0
+playwright==1.59.0
+filelock==4.1.1
+python-docx==1.2.0
+pdfplumber==0.11.9
+pypdfium2==5.8.0
+rapidocr-onnxruntime==1.2.3
+requests==2.33.1
+APScheduler==3.11.3
+fastapi==0.143.0
+uvicorn==0.54.0
+jinja2==3.1.6
+win11toast==0.36.3; sys_platform == "win32"

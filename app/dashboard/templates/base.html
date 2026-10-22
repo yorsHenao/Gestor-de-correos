@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% block refresco %}{% endblock %}
+  <title>Gestor de correos · {% block titulo %}Inicio{% endblock %}</title>
+  <style>
+    :root {
+      --fondo: #f3f4f6;
+      --tarjeta: #fff;
+      --borde: #e6e8ec;
+      --texto: #1c1c1c;
+      --suave: #8a8f98;
+      --naranja: #ef4e23;
+      --durazno: #fde8e3;
+      --durazno-borde: #f3cfc6;
+      --ok: #3d8b66;
+      --aviso: #b86a2a;
+      --error: #b55248;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+      background: var(--fondo);
+      color: var(--texto);
+    }
+    header {
+      background: var(--tarjeta);
+      color: var(--texto);
+      padding: 14px 28px;
+      border-bottom: 1px solid var(--borde);
+    }
+    header strong { font-size: 16px; font-weight: 600; color: var(--naranja); letter-spacing: -0.01em; }
+    main { max-width: 920px; margin: 0 auto; padding: 28px 24px 56px; }
+    .tarjetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 16px; }
+    .tarjeta {
+      background: var(--tarjeta);
+      border: 1px solid var(--borde);
+      border-radius: 12px;
+      padding: 18px 20px;
+      box-shadow: 0 1px 2px rgba(28, 28, 28, 0.04);
+    }
+    .tarjeta h3 {
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--suave);
+    }
+    .tarjeta .valor { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+    h2 {
+      margin: 28px 0 12px;
+      font-size: 15px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .estado { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .ok { background: #e5f4ec; color: var(--ok); }
+    .aviso { background: #fff1e4; color: var(--aviso); }
+    .error { background: #fdecea; color: var(--error); }
+    .omitido { background: #eef0f3; color: var(--suave); }
+    .error-suave { color: var(--error); margin: 0 0 12px; }
+    .banner, .pausa {
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+    }
+    .banner { background: var(--durazno); border: 1px solid var(--durazno-borde); }
+    .pausa { background: #fff6ef; border: 1px solid #f3ddc8; }
+    .banner ul { margin: 6px 0 0; padding-left: 18px; }
+    .banner li { margin: 2px 0; }
+    form.inline { display: inline; }
+    button {
+      font: inherit;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 8px;
+      border: 1px solid #d9dde3;
+      background: #fff;
+      color: var(--texto);
+      cursor: pointer;
+    }
+    button.principal { background: var(--naranja); color: #fff; border-color: var(--naranja); font-weight: 600; }
+    button.secundario { background: #fff; color: var(--texto); }
+    button.activo { background: var(--durazno); border-color: var(--durazno-borde); color: var(--texto); font-weight: 600; }
+    button:disabled { opacity: .45; cursor: default; }
+    button.activo:disabled { opacity: 1; }
+    button.corriendo,
+    button.corriendo:disabled {
+      background: var(--naranja);
+      color: #fff;
+      border-color: var(--naranja);
+      opacity: 1;
+      font-weight: 600;
+    }
+    button:hover:not(:disabled) { filter: brightness(.97); }
+    button:focus-visible { outline: 2px solid #f5b9a4; outline-offset: 2px; }
+    .suave { color: var(--suave); }
+    a { color: var(--naranja); }
+    .meta-vista { font-size: 13px; color: var(--suave); margin: 0 0 16px; }
+    .fila-botones, .fila-modos, .pasos-sueltos { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .fila-modos { margin-top: 16px; gap: 18px 28px; }
+    .modo { display: flex; align-items: center; gap: 10px; }
+    .etiqueta {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--suave);
+    }
+    .segmento { display: inline-flex; }
+    .segmento form { display: flex; }
+    .segmento button { border-radius: 0; }
+    .segmento form:first-child button { border-radius: 8px 0 0 8px; }
+    .segmento form:last-child button { border-radius: 0 8px 8px 0; margin-left: -1px; }
+    .pasos-sueltos { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--borde); }
+    .nota { margin: 10px 0 0; font-size: 13px; }
+    .conteo-estado { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
+    .conteo-estado.destacado { font-weight: 600; }
+    @media (max-width: 720px) {
+      header { padding: 14px 16px; }
+      main { padding: 20px 16px 40px; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <strong>Gestor de correos</strong>
+</header>
+<main>
+  {% if alertas %}
+  <div class="banner">
+    <strong>Avisos</strong>
+    <ul>
+      {% for a in alertas %}<li><span class="suave">{{ a.fecha }}</span> · <strong>{{ a.titulo }}</strong>{% if a.detalle %} — {{ a.detalle[:300] }}{% endif %}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% if pausado %}
+  <div class="pausa">El servicio está en pausa. No se lanzan ciclos programados.</div>
+  {% endif %}
+  {% block contenido %}{% endblock %}
+</main>
+</body>
+</html>

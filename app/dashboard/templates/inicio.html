@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block refresco %}{% if refresco_seg %}<meta http-equiv="refresh" content="{{ refresco_seg }}">{% endif %}{% endblock %}
+{% block contenido %}
+{% if en_curso %}<p class="meta-vista">Se actualiza solo.</p>{% endif %}
+<div class="tarjetas">
+  <div class="tarjeta">
+    <h3>Próximo ciclo</h3>
+    <div class="valor">{% if proximo %}{{ proximo.strftime("%d/%m %H:%M") }}{% else %}—{% endif %}</div>
+    <div class="suave">Cada {{ "%g"|format(ciclo_horas) }} h</div>
+  </div>
+  <div class="tarjeta">
+    <h3>Ahora</h3>
+    <div class="valor">
+      {% if esperando %}Esperando confirmación
+      {% elif etiqueta_paso %}{{ etiqueta_paso }}
+      {% else %}—{% endif %}
+    </div>
+  </div>
+  <div class="tarjeta">
+    <h3>Sesión de Lupe</h3>
+    <div class="valor">
+      {% if estado_lupe == "vigente" %}<span class="estado ok">Vigente</span>
+      {% elif estado_lupe == "requiere_login" %}<span class="estado error">Pide login</span>
+      {% elif estado_lupe == "sin_perfil" %}<span class="estado aviso">Sin perfil</span>
+      {% else %}<span class="estado omitido">{{ estado_lupe }}</span>{% endif %}
+    </div>
+    {% if estado_lupe in ("requiere_login", "sin_perfil") %}
+      <div class="suave">En este PC: <code>python main.py login</code></div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="tarjeta">
+  <div class="fila-botones">
+    <form class="inline" method="post" action="/acciones/ciclo">
+      <button type="submit" class="principal" {% if en_curso %}disabled{% endif %}>Ejecutar ciclo</button>
+    </form>
+    {% if pausado %}
+      <form class="inline" method="post" action="/acciones/reanudar"><button type="submit">Reanudar</button></form>
+    {% else %}
+      <form class="inline" method="post" action="/acciones/pausar"><button type="submit">Pausar</button></form>
+    {% endif %}
+    {% if esperando %}
+      <form class="inline" method="post" action="/acciones/continuar"><button type="submit" class="principal">Continuar</button></form>
+    {% endif %}
+  </div>
+
+  <div class="fila-modos">
+    <div class="modo">
+      <span class="etiqueta">Envío</span>
+      <div class="segmento">
+        <form method="post" action="/acciones/calidad/borrador">
+          <button type="submit" class="{% if borrador %}activo{% endif %}" {% if borrador or calidad_bloqueada %}disabled{% endif %}>Borrador</button>
+        </form>
+        <form method="post" action="/acciones/calidad/enviar">
+          <button type="submit" class="{% if not borrador %}activo{% endif %}" {% if not borrador or calidad_bloqueada %}disabled{% endif %}>Enviar</button>
+        </form>
+      </div>
+    </div>
+    <div class="modo">
+      <span class="etiqueta">Tras clasificar</span>
+      <div class="segmento">
+        <form method="post" action="/acciones/revision/continuo">
+          <button type="submit" class="{% if not confirmar %}activo{% endif %}" {% if not confirmar %}disabled{% endif %}>Continuo</button>
+        </form>
+        <form method="post" action="/acciones/revision/confirmar">
+          <button type="submit" class="{% if confirmar %}activo{% endif %}" {% if confirmar %}disabled{% endif %}>Confirmar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% if esperando %}<p class="nota">Clasificación lista. Revisa las etiquetas y continúa.</p>{% endif %}
+  {% if calidad_bloqueada %}<p class="nota suave">El envío se cambia en pausa.</p>{% endif %}
+
+  <div class="pasos-sueltos">
+    <span class="etiqueta">Pasos</span>
+    {% for nombre, etiqueta in pasos %}
+      <form class="inline" method="post" action="/acciones/paso/{{ nombre }}">
+        <button type="submit" class="secundario{% if nombre == paso_en_curso %} corriendo{% endif %}" {% if en_curso %}disabled{% endif %}>{{ etiqueta }}</button>
+      </form>
+    {% endfor %}
+  </div>
+</div>
+
+<h2>Casos
+  <form class="inline" method="post" action="/acciones/refrescar-sheet"><button type="submit" class="secundario">Actualizar</button></form>
+</h2>
+{% if casos.error %}<p class="error-suave">No se pudieron leer los conteos.</p>{% endif %}
+<div class="tarjetas">
+  <div class="tarjeta"><h3>RT</h3>
+    {% for estado, n in casos.rt_lista %}
+      <div class="conteo-estado{% if estado in ('En Slack - pendiente', 'Nuevo', 'Caso manual') %} destacado{% endif %}"><span>{{ estado }}</span><strong>{{ n }}</strong></div>
+    {% else %}<div class="suave">—</div>{% endfor %}
+  </div>
+  <div class="tarjeta"><h3>Entes</h3>
+    {% for estado, n in casos.entes_lista %}
+      <div class="conteo-estado{% if 'Error' in estado or estado == 'revisión manual' %} destacado{% endif %}"><span>{{ estado }}</span><strong>{{ n }}</strong></div>
+    {% else %}<div class="suave">—</div>{% endfor %}
+  </div>
+</div>
+{% endblock %}

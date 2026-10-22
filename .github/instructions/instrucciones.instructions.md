@@ -1,0 +1,5 @@
+- Estándar de Código: Seguir estrictamente PEP 8 para Python.
+- Manejo de Errores: Nunca silenciar excepciones con bloques try...except vacíos o genéricos sin un registro (log) o impresión clara.
+- Modularidad y DRY: Evitar la duplicación de código. Si una lógica de llamada a API o procesamiento se usa en más de un archivo, extraerla a un helper común.
+- Gestión de Secretos: No quemar nunca tokens, credenciales, IDs de canales de Slack o carpetas de Drive en el código; usar obligatoriamente variables de entorno con python-dotenv.
+- Tipado y Documentación: Mantener funciones limpias con comentarios descriptivos en español cuando la lógica de negocio lo amerite.
