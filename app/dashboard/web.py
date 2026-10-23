@@ -139,9 +139,32 @@ def inicio(request: Request):
         confirmar=ajustes.confirmar_tras_clasificar(),
         calidad_bloqueada=not ajustes.calidad_editable(en_curso, en_pausa),
         esperando=orquestador.esperando_revision(),
+        deteniendo=orquestador.paso_detenido(),
         paso_en_curso=nombre_paso,
         etiqueta_paso=_ETIQUETAS_PASOS.get(nombre_paso, nombre_paso) if nombre_paso else "",
         pagina_activa="inicio",
+    )
+
+
+def _lineas_registro(limite=200):
+    from utils.logger import RUTA_LOG
+
+    if not RUTA_LOG.is_file():
+        return ""
+    texto = RUTA_LOG.read_text(encoding="utf-8", errors="replace")
+    return "\n".join(texto.splitlines()[-limite:])
+
+
+@app.get("/registro")
+def registro(request: Request):
+    en_curso = orquestador.ciclo_en_curso()
+    return _render(
+        request,
+        "registro.html",
+        lineas=_lineas_registro(),
+        en_curso=en_curso,
+        refresco_seg=10 if en_curso else 0,
+        pagina_activa="registro",
     )
 
 
@@ -174,6 +197,12 @@ def accion_paso(nombre: str):
 @app.post("/acciones/pausar")
 def accion_pausar():
     orquestador.pausar()
+    return _volver()
+
+
+@app.post("/acciones/detener")
+def accion_detener():
+    orquestador.detener_paso()
     return _volver()
 
 

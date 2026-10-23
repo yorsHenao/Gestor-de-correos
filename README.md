@@ -33,16 +33,23 @@ Hay que seguir este orden.
    python3 -m pip install -r requirements.txt
    ```
 
-2. Activar Gmail, Drive, Documentos y Hojas de cálculo, y guardar el archivo de credenciales en `data-json/credentials.json`. El recorrido, pantalla por pantalla, está en [Configuración de las APIs de Google](#configuración-de-las-apis-de-google).
-3. Crear al menos una clave de inteligencia artificial y pegarla en el `.env`. Sin comillas y sin espacios. Las claves de Slack que ya están en el archivo se dejan igual. Los modelos no hay que elegirlos: si `GROQ_MODEL` y `GEMINI_MODEL` quedan vacías, el programa usa los que ya trae.
+2. Con el entorno todavía activo, instalar el navegador. Lo abren Lupe y el formulario de Entes.
+
+   ```
+   python -m playwright install chromium
+   ```
+
+   En Mac y Linux, si el comando es `python3`, usa `python3 -m playwright install chromium`.
+3. Activar Gmail, Drive, Documentos y Hojas de cálculo, y guardar el archivo de credenciales en `data-json/credentials.json`. El recorrido, pantalla por pantalla, está en [Configuración de las APIs de Google](#configuración-de-las-apis-de-google).
+4. Crear al menos una clave de inteligencia artificial y pegarla en el `.env`. Sin comillas y sin espacios. Las claves de Slack que ya están en el archivo se dejan igual. Los modelos no hay que elegirlos: si `GROQ_MODEL` y `GEMINI_MODEL` quedan vacías, el programa usa los que ya trae.
 
    Groq: entra a [console.groq.com/keys](https://console.groq.com/keys), inicia sesión y pulsa **Create API Key**. Copia la clave en ese momento, porque después no se vuelve a mostrar completa. En el `.env` agrega `GROQ_API_KEY=` y pega la clave a continuación.
 
    Gemini: entra a [aistudio.google.com/apikey](https://aistudio.google.com/apikey) con una cuenta de Google y pulsa **Create API key**. Si pide un proyecto, elige uno. Copia la clave y en el `.env` agrega `GEMINI_API_KEY=` seguida de esa clave.
 
    Si las dos están llenas y `IA_PROVIDER` se deja vacía, el programa empieza por Groq. Si Groq falla, usa Gemini.
-4. La carpeta ya trae un `.env` con las claves de Slack. Completarlo con las líneas de `.env.example`, en el mismo orden del ejemplo: hojas y carpetas, etiquetas de Gmail, cartas, correo de respuesta, Slack, claves y, al final, lo que puede quedar vacío. Completar el archivo que ya está. Si se copia el ejemplo encima, se borran las claves de Slack.
-5. Crear en Gmail una etiqueta por cada categoría de abajo. Con el entorno activo, correr `python scripts/lector_etiquetas.py`. Sale el nombre de cada etiqueta y, después de la flecha, su id. Ese id es un código. Copiar solo el código y pegarlo después del `=` de la variable, en el grupo de etiquetas del `.env`.
+5. La carpeta ya trae un `.env` con las claves de Slack. Completarlo con las líneas de `.env.example`, en el mismo orden del ejemplo: hojas y carpetas, etiquetas de Gmail, cartas, correo de respuesta, Slack, claves y, al final, lo que puede quedar vacío. Completar el archivo que ya está. Si se copia el ejemplo encima, se borran las claves de Slack.
+6. Crear en Gmail una etiqueta por cada categoría de abajo. Con el entorno activo, correr `python scripts/lector_etiquetas.py`. Sale el nombre de cada etiqueta y, después de la flecha, su id. Ese id es un código. Copiar solo el código y pegarlo después del `=` de la variable, en el grupo de etiquetas del `.env`.
 
    - RT bloqueado, en `GMAIL_LABEL_ID`. Correo de un repartidor con la cuenta bloqueada.
    - Revisión manual, en `GMAIL_LABEL_REVISION_MANUAL`. Correo que debe ver una persona.
@@ -51,16 +58,16 @@ Hay que seguir este orden.
    - Facturación, en `GMAIL_LABEL_FACTURACION`.
    - Restaurantes, en `GMAIL_LABEL_RESTAURANTES`.
    - Eliminar deuda del repartidor, en `GMAIL_LABEL_ELIMINAR_DEUDA_RTS`.
-6. Crear las carpetas de Drive y dos hojas vacías. Sus id van en el grupo de hojas y carpetas del `.env`. El id es el código largo de la dirección del navegador. La primera fila lleva los títulos de abajo, en ese orden. El programa escribe desde la segunda.
+7. Crear las carpetas de Drive y dos hojas vacías. Sus id van en el grupo de hojas y carpetas del `.env`. El id es el código largo de la dirección del navegador. La primera fila lleva los títulos de abajo, en ese orden. El programa escribe desde la segunda.
 
    Hoja RT (`DRIVE_SHEETS_ID`): A nombre, B correo del peticionario, C id_rt, D estado, E fecha, F hilo de Slack, G id del mensaje. G identifica la fila. Quien revisa puede escribir en D **Completado** o **Caso manual**. El programa toma ese cierre al empezar la siguiente ronda.
 
    Hoja Entes (`DRIVE_SHEETS_ENTES_ID`): A peticionario, B correo, C id de usuario, D fecha, E causal, F estado, G id del mensaje, H completado. G identifica la fila. H la escribe quien revisa, y el programa la deja como está.
 
    La carpeta de respuestas es `DRIVE_RESPONSES_FOLDER`. `DRIVE_PDF_FOLDER` y `DRIVE_SCREENSHOTS_FOLDER` pueden quedar vacías: el programa usa la carpeta de respuestas.
-7. Subir cada archivo de `formatos/` a Drive y abrirlo como Documento de Google. No modificar las llaves que ya trae el documento. El id de cada archivo va en el grupo de cartas del `.env`, en su `DOC_TEMPLATE_*`. La carpeta de las cartas no se configura.
-8. `python main.py login`. Se abre Lupe en este computador. La persona entra con Google y espera a ver la pantalla principal. El perfil queda fuera del proyecto, en `%LOCALAPPDATA%\ProyectoE\lupe_profile`, salvo que `LUPE_PROFILE_DIR` diga otra carpeta. Si Google bloquea el navegador, poner `LUPE_CHANNEL=chrome` y volver a correr el login.
-9. `python main.py servicio`. Abre la página del programa en http://127.0.0.1:8000, salvo que `DASHBOARD_PUERTO` sea otro. El ciclo se repite cada `CICLO_HORAS`. Si esa línea está vacía, son 4 horas.
+8. Subir cada archivo de `formatos/` a Drive y abrirlo como Documento de Google. No modificar las llaves que ya trae el documento. El id de cada archivo va en el grupo de cartas del `.env`, en su `DOC_TEMPLATE_*`. La carpeta de las cartas no se configura.
+9. `python main.py login`. Se abre Lupe en este computador. La persona entra con Google y espera a ver la pantalla principal. El perfil queda fuera del proyecto, en `%LOCALAPPDATA%\ProyectoE\lupe_profile`, salvo que `LUPE_PROFILE_DIR` diga otra carpeta. Si Google bloquea el navegador, poner `LUPE_CHANNEL=chrome` y volver a correr el login.
+10. `python main.py servicio`. Abre la página del programa en http://127.0.0.1:8000, salvo que `DASHBOARD_PUERTO` sea otro. El ciclo se repite cada `CICLO_HORAS`. Si esa línea está vacía, son 4 horas.
 
 La primera vez que corre, el programa crea `data/runs.db` en este computador. Ahí guarda los casos de RT que siguen abiertos, los de Entes que quedaron sin cerrar y la hora del último ciclo. Con eso retoma el trabajo si se detiene.
 
@@ -135,7 +142,7 @@ Si Google avisa que la aplicación no está verificada, pulsa **Configuración a
 
 ## Dashboard
 
-Es la página del programa en este computador: http://127.0.0.1:8000. Arriba muestra cuándo es el próximo ciclo y si la entrada a Lupe sigue vigente. Desde ahí se puede lanzar el ciclo, pausarlo o reanudarlo, y también correr un solo paso: clasificar, RT, Slack o Entes. Abajo se ve cuántos casos de RT y de Entes hay en cada estado.
+Es la página del programa en este computador: http://127.0.0.1:8000. Arriba muestra cuándo es el próximo ciclo y si la entrada a Lupe sigue vigente. Desde ahí se puede lanzar el ciclo, pausarlo o reanudarlo, y también correr un solo paso: clasificar, RT, Slack o Entes. Abajo se ve cuántos casos de RT y de Entes hay en cada estado. El detalle de cada paso se ve en **Registro**. **Detener paso** corta el paso en curso al terminar el caso actual, sin dejar el servicio en pausa.
 
 **Borrador** deja la respuesta en Gmail, sin enviarla. **Enviar** la manda. Ese cambio se hace en pausa, o cuando no hay un ciclo corriendo. `CONTROL_CALIDAD` guarda la elección: `true` es borrador y `false` es envío.
 

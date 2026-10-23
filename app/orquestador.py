@@ -49,6 +49,7 @@ CANDADO_CICLO = RAIZ / "data" / "ciclo.lock"
 ESPERA_REVISION_SEG = 0.5
 _confirmar = threading.Event()
 _paso_en_curso = None
+_cortar_ciclo = False
 
 _GRAVEDAD = {"ok": 0, "omitido": 0, "aviso": 1, "error": 2}
 
@@ -82,6 +83,20 @@ def reanudar():
     FLAG_PAUSA.unlink(missing_ok=True)
     limpiar_detener()
     log.info("Servicio reanudado", **_extra())
+
+
+def detener_paso():
+    global _cortar_ciclo
+    if not ciclo_en_curso():
+        return False
+    _cortar_ciclo = True
+    solicitar_detener()
+    log.warning("Parada del paso pedida desde el dashboard", **_extra())
+    return True
+
+
+def paso_detenido():
+    return _cortar_ciclo and ciclo_en_curso()
 
 
 def _en_pausa():
@@ -122,6 +137,9 @@ def _esperar_confirmacion():
         while True:
             if _en_pausa():
                 log.warning("Servicio en pausa: el ciclo para durante la revisión", **_extra())
+                return False
+            if _cortar_ciclo:
+                log.warning("Paso detenido: el ciclo no sigue", **_extra())
                 return False
             if not _revision_activa():
                 log.info("Revisión desactivada: el ciclo sigue", **_extra())
@@ -281,8 +299,10 @@ def ejecutar_ciclo(origen="programado", pasos=None, eco=None):
 
 
 def _ciclo(origen, pasos, eco):
+    global _cortar_ciclo
     from utils.config_manager import validar_criticos
 
+    _cortar_ciclo = False
     registro.marcar_ultimo_ciclo()
     FLAG_ESPERANDO.unlink(missing_ok=True)
     FLAG_CONTINUAR.unlink(missing_ok=True)
@@ -301,6 +321,9 @@ def _ciclo(origen, pasos, eco):
     peor = "ok"
     sin_lupe = False
     for indice, nombre in enumerate(pasos):
+        if _cortar_ciclo:
+            log.warning("Paso detenido: el ciclo no sigue", **_extra())
+            break
         if pausado() and origen != "manual":
             log.warning("Servicio en pausa: el ciclo para antes de %s", nombre, **_extra())
             break
@@ -312,6 +335,9 @@ def _ciclo(origen, pasos, eco):
             sin_lupe = True
         if _GRAVEDAD[resultado["estado"]] > _GRAVEDAD[peor]:
             peor = resultado["estado"]
+        if _cortar_ciclo:
+            log.warning("Paso detenido: el ciclo no sigue", **_extra())
+            break
         decision = decision_tras_clasificar(
             nombre,
             resultado["estado"],

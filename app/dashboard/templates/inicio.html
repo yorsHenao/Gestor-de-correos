@@ -40,6 +40,9 @@
     {% else %}
       <form class="inline" method="post" action="/acciones/pausar"><button type="submit">Pausar</button></form>
     {% endif %}
+    {% if en_curso %}
+      <form class="inline" method="post" action="/acciones/detener"><button type="submit">Detener paso</button></form>
+    {% endif %}
     {% if esperando %}
       <form class="inline" method="post" action="/acciones/continuar"><button type="submit" class="principal">Continuar</button></form>
     {% endif %}
@@ -69,6 +72,7 @@
       </div>
     </div>
   </div>
+  {% if deteniendo %}<p class="nota">El paso termina el caso actual y se detiene.</p>{% endif %}
   {% if esperando %}<p class="nota">Clasificación lista. Revisa las etiquetas y continúa.</p>{% endif %}
   {% if calidad_bloqueada %}<p class="nota suave">El envío se cambia en pausa.</p>{% endif %}
 

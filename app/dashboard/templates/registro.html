@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block titulo %}Registro{% endblock %}
+{% block refresco %}{% if refresco_seg %}<meta http-equiv="refresh" content="{{ refresco_seg }}">{% endif %}{% endblock %}
+{% block contenido %}
+{% if en_curso %}<p class="meta-vista">Se actualiza solo.</p>{% endif %}
+<div class="tarjeta">
+  {% if lineas %}
+  <pre class="registro">{{ lineas }}</pre>
+  {% else %}
+  <p class="suave">Aún no hay registro.</p>
+  {% endif %}
+</div>
+{% endblock %}
