@@ -51,9 +51,12 @@ def guardar_fila(registro, estado):
     if not DRIVE_SHEETS_ENTES_ID:
         raise RuntimeError("DRIVE_SHEETS_ENTES_ID no está en el .env")
     mensaje_id = registro.get("mensaje_id") or ""
+    correo = str(registro.get("correo") or "").strip()
+    if not correo or correo.lower().endswith("@rappi.com"):
+        correo = "pedir correo"
     fila = [
         registro.get("peticionario") or "",
-        registro.get("correo") or "",
+        correo,
         registro.get("id_usuario") or "0",
         registro.get("fecha_peticion") or "",
         registro.get("causal") or "Otro",

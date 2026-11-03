@@ -11,6 +11,7 @@ centralizada cuando se ejecuta desde main.py.
 """
 
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -19,6 +20,18 @@ BASE_DIR = Path(__file__).parent.parent
 
 # --- Carga del .env ---
 load_dotenv(BASE_DIR / ".env")
+
+
+def _numero_env(variable, defecto, tipo=int):
+    """Número del .env; si la línea está vacía o mal escrita, usa el valor por defecto."""
+    texto = (os.getenv(variable) or "").strip()
+    if not texto:
+        return tipo(defecto)
+    try:
+        return tipo(texto)
+    except ValueError:
+        print(f"Aviso: {variable}={texto!r} no es un número válido; se usa {defecto}", file=sys.stderr)
+        return tipo(defecto)
 
 
 def _ruta_env(variable, defecto):
@@ -42,11 +55,11 @@ LUPE_PROFILE_DIR = Path(
 )
 # interactivo: si Google pide clave, espera a una persona. automatico: sale con código 20.
 LUPE_MODO = os.getenv("LUPE_MODO", "interactivo").strip().lower()
-LUPE_REINGRESO_SEG = int(os.getenv("LUPE_REINGRESO_SEG", "30"))
-LUPE_LOGIN_MAX_SEG = int(os.getenv("LUPE_LOGIN_MAX_SEG", "300"))
+LUPE_REINGRESO_SEG = _numero_env("LUPE_REINGRESO_SEG", "30")
+LUPE_LOGIN_MAX_SEG = _numero_env("LUPE_LOGIN_MAX_SEG", "300")
 # Vacío = Chromium de Playwright; "chrome" = Google Chrome instalado.
 LUPE_CHANNEL = os.getenv("LUPE_CHANNEL", "").strip()
-LUPE_LOCK_ESPERA_SEG = int(os.getenv("LUPE_LOCK_ESPERA_SEG", "1800"))
+LUPE_LOCK_ESPERA_SEG = _numero_env("LUPE_LOCK_ESPERA_SEG", "1800")
 LUPE_SESION_ESTADO = BASE_DIR / "logs" / "lupe_sesion_estado.json"
 
 # --- Cuenta que recibe las respuestas legales ---
@@ -100,15 +113,15 @@ SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 
 # Entes: hoja de registro, formulario y reintentos entre rondas.
 DRIVE_SHEETS_ENTES_ID = os.getenv("DRIVE_SHEETS_ENTES_ID", "")
-ENTES_MAX_CORREOS = int(os.getenv("ENTES_MAX_CORREOS", "26"))
-ENTES_TIMEOUT_FORM = int(os.getenv("ENTES_TIMEOUT_FORM", "120"))
-ENTES_MAX_INTENTOS = int(os.getenv("ENTES_MAX_INTENTOS", "3"))
-ENTES_MAX_FALLOS_RONDA = int(os.getenv("ENTES_MAX_FALLOS_RONDA", "2"))
-ENTES_MAX_IMAGENES = max(0, int(os.getenv("ENTES_MAX_IMAGENES", "3")))
+ENTES_MAX_CORREOS = _numero_env("ENTES_MAX_CORREOS", "26")
+ENTES_TIMEOUT_FORM = _numero_env("ENTES_TIMEOUT_FORM", "120")
+ENTES_MAX_INTENTOS = _numero_env("ENTES_MAX_INTENTOS", "3")
+ENTES_MAX_FALLOS_RONDA = _numero_env("ENTES_MAX_FALLOS_RONDA", "2")
+ENTES_MAX_IMAGENES = max(0, _numero_env("ENTES_MAX_IMAGENES", "3"))
 
 # Servicio automático: ciclo, dashboard y alertas.
-CICLO_HORAS = float(os.getenv("CICLO_HORAS", "4"))
-DASHBOARD_PUERTO = int(os.getenv("DASHBOARD_PUERTO", "8000"))
+CICLO_HORAS = _numero_env("CICLO_HORAS", "4", float)
+DASHBOARD_PUERTO = _numero_env("DASHBOARD_PUERTO", "8000")
 DASHBOARD_URL = f"http://127.0.0.1:{DASHBOARD_PUERTO}"
 ALERTAS_CANALES = [
     canal.strip().lower()

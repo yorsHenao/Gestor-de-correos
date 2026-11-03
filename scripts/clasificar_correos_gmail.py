@@ -335,110 +335,116 @@ def clasificar_correos():
     for mensaje in mensajes:
         contadores["procesados"] += 1
         comprobar_detener("Parada antes del siguiente correo a clasificar.")
-        msg = servicio.users().messages().get(
-            userId="me",
-            id=mensaje["id"],
-            format="full"
-        ).execute()
-
-        headers = msg["payload"]["headers"]
-        asunto = next((h["value"] for h in headers if h["name"] == "Subject"), "Sin asunto")
-        remitente = next((h["value"] for h in headers if h["name"] == "From"), "Desconocido")
-        _, correo_from = parseaddr(remitente)
-        if _es_recepcion_hub(correo_from or remitente):
-            _imprimir_clasificacion(
-                correo_from or remitente,
-                "",
-                [],
-                LABEL_MANUAL,
-                0,
-                "recepción hub — revisión manual",
-            )
-            _marcar_revision_manual(servicio, mensaje["id"])
-            continue
-
-        cuerpo, adjuntos = extraer_contenido(msg, servicio)
-
-        _, correo_peticionario = _obtener_peticionario(
-            remitente, f"{cuerpo}\n{adjuntos}"
-        )
-        if _es_recepcion_hub(correo_peticionario):
-            _imprimir_clasificacion(
-                correo_peticionario,
-                "",
-                [],
-                LABEL_MANUAL,
-                0,
-                "recepción hub — revisión manual",
-            )
-            _marcar_revision_manual(servicio, mensaje["id"])
-            continue
-
-        thread_id = msg["threadId"]
-        resultado_hilo = servicio.users().threads().get(
-            userId="me", id=thread_id, format="metadata"
-        ).execute()
-
-        etiquetas_existentes_en_hilo = set()
-        for m in resultado_hilo.get("messages", []):
-            etiquetas_existentes_en_hilo.update(m.get("labelIds", []))
-
-        categorias_nuestras = {
-            LABEL_RT, LABEL_ELIMINAR_DEUDA_RTS, LABEL_ENTES, LABEL_MANUAL,
-            LABEL_OTROS, LABEL_FACTURACION,
-            LABEL_RESTAURANTES,
-        }
-        categorias_nuestras.discard("")
-        ya_gestionado = bool(etiquetas_existentes_en_hilo & categorias_nuestras)
-
-        if ya_gestionado:
-            _imprimir_clasificacion(
-                correo_peticionario,
-                "",
-                [],
-                LABEL_MANUAL,
-                0,
-                "hilo ya clasificado — revisión manual",
-            )
-
-            _marcar_revision_manual(servicio, mensaje["id"])
-            continue
-
-        etiqueta = None
         try:
-            resultado_ia = clasificar_correo(asunto, cuerpo, adjuntos=adjuntos)
-            categorias = resultado_ia.get('categorias', [])
-            etiqueta, razon = _decidir_etiqueta(
-                resultado_ia, f"{asunto}\n{cuerpo}\n{adjuntos}"
+            msg = servicio.users().messages().get(
+                userId="me",
+                id=mensaje["id"],
+                format="full"
+            ).execute()
+
+            headers = msg["payload"]["headers"]
+            asunto = next((h["value"] for h in headers if h["name"] == "Subject"), "Sin asunto")
+            remitente = next((h["value"] for h in headers if h["name"] == "From"), "Desconocido")
+            _, correo_from = parseaddr(remitente)
+            if _es_recepcion_hub(correo_from or remitente):
+                _imprimir_clasificacion(
+                    correo_from or remitente,
+                    "",
+                    [],
+                    LABEL_MANUAL,
+                    0,
+                    "recepción hub — revisión manual",
+                )
+                _marcar_revision_manual(servicio, mensaje["id"])
+                continue
+
+            cuerpo, adjuntos = extraer_contenido(msg, servicio)
+
+            _, correo_peticionario = _obtener_peticionario(
+                remitente, f"{cuerpo}\n{adjuntos}"
             )
-        except Exception as error:
-            log_caso(log, correo_peticionario).warning("IA no disponible: %s", error)
-            resultado_ia = {"categorias": [], "confianza": 0, "resumen": ""}
-            categorias = []
-            etiqueta = LABEL_MANUAL
-            razon = "IA no disponible, revisión manual"
+            if _es_recepcion_hub(correo_peticionario):
+                _imprimir_clasificacion(
+                    correo_peticionario,
+                    "",
+                    [],
+                    LABEL_MANUAL,
+                    0,
+                    "recepción hub — revisión manual",
+                )
+                _marcar_revision_manual(servicio, mensaje["id"])
+                continue
 
-        _imprimir_clasificacion(
-            correo_peticionario,
-            resultado_ia.get("resumen", ""),
-            categorias,
-            etiqueta,
-            resultado_ia.get("confianza", 0),
-            razon,
-        )
+            thread_id = msg["threadId"]
+            resultado_hilo = servicio.users().threads().get(
+                userId="me", id=thread_id, format="metadata"
+            ).execute()
 
-        servicio.users().messages().modify(
-            userId="me",
-            id=mensaje["id"],
-            body={
-                "addLabelIds": [etiqueta],
-                "removeLabelIds": ["INBOX"]
+            etiquetas_existentes_en_hilo = set()
+            for m in resultado_hilo.get("messages", []):
+                etiquetas_existentes_en_hilo.update(m.get("labelIds", []))
+
+            categorias_nuestras = {
+                LABEL_RT, LABEL_ELIMINAR_DEUDA_RTS, LABEL_ENTES, LABEL_MANUAL,
+                LABEL_OTROS, LABEL_FACTURACION,
+                LABEL_RESTAURANTES,
             }
-        ).execute()
-        if etiqueta != LABEL_MANUAL:
-            contadores["completados"] += 1
+            categorias_nuestras.discard("")
+            ya_gestionado = bool(etiquetas_existentes_en_hilo & categorias_nuestras)
 
-    contadores["revision_manual"] = contadores["procesados"] - contadores["completados"]
+            if ya_gestionado:
+                _imprimir_clasificacion(
+                    correo_peticionario,
+                    "",
+                    [],
+                    LABEL_MANUAL,
+                    0,
+                    "hilo ya clasificado — revisión manual",
+                )
+
+                _marcar_revision_manual(servicio, mensaje["id"])
+                continue
+
+            etiqueta = None
+            try:
+                resultado_ia = clasificar_correo(asunto, cuerpo, adjuntos=adjuntos)
+                categorias = resultado_ia.get('categorias', [])
+                etiqueta, razon = _decidir_etiqueta(
+                    resultado_ia, f"{asunto}\n{cuerpo}\n{adjuntos}"
+                )
+            except Exception as error:
+                log_caso(log, correo_peticionario).warning("IA no disponible: %s", error)
+                resultado_ia = {"categorias": [], "confianza": 0, "resumen": ""}
+                categorias = []
+                etiqueta = LABEL_MANUAL
+                razon = "IA no disponible, revisión manual"
+
+            _imprimir_clasificacion(
+                correo_peticionario,
+                resultado_ia.get("resumen", ""),
+                categorias,
+                etiqueta,
+                resultado_ia.get("confianza", 0),
+                razon,
+            )
+
+            servicio.users().messages().modify(
+                userId="me",
+                id=mensaje["id"],
+                body={
+                    "addLabelIds": [etiqueta],
+                    "removeLabelIds": ["INBOX"]
+                }
+            ).execute()
+            if etiqueta != LABEL_MANUAL:
+                contadores["completados"] += 1
+        except Exception as error:
+            contadores["errores"] += 1
+            log.error("No se pudo clasificar el correo %s; queda en la bandeja para la siguiente ronda: %s", mensaje["id"], error)
+
+    contadores["revision_manual"] = (
+        contadores["procesados"] - contadores["completados"] - contadores["errores"]
+    )
     resumen(log, **contadores)
 
 

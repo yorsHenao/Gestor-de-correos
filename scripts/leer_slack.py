@@ -12,7 +12,7 @@ from utils.exceptions import LupeOcupado, LupeSesionRequerida
 import storage
 import requests
 from config import CONTROL_CALIDAD, SLACK_BOT_TOKEN, SLACK_REVIEW_CHANNEL_ID
-from utils.logger import log_caso, obtener_log, resumen
+from utils.logger import log_caso, obtener_log, resumen, resumir_error
 
 log = obtener_log("slack")
 
@@ -43,10 +43,15 @@ def _descargar_primera_imagen(mensajes, clog=log):
                 url = archivo.get("url_private")
                 if not url:
                     continue
-                respuesta = requests.get(
-                    url,
-                    headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
-                )
+                try:
+                    respuesta = requests.get(
+                        url,
+                        headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
+                        timeout=30,
+                    )
+                except requests.RequestException as error:
+                    clog.warning("Slack: no se pudo descargar la imagen: %s", error)
+                    continue
                 if respuesta.status_code == 200:
                     clog.info("Slack: imagen de prueba descargada")
                     return respuesta.content
@@ -125,7 +130,19 @@ def _revisar_pendientes(lupe):
             clog.info("Sigue pendiente: el hilo no tiene texto de OPS")
             continue
 
-        resultado_ia = agente_slack.interpretar_respuesta(respuesta_ops)
+        if storage.falta_correo_peticionario(
+            (informacion.get("correo") or {}).get("correo_peticionario")
+        ):
+            contadores["esperando_ops"] += 1
+            clog.info("Sigue pendiente: falta el correo del peticionario")
+            continue
+
+        try:
+            resultado_ia = agente_slack.interpretar_respuesta(respuesta_ops)
+        except Exception as e:
+            contadores["errores"] += 1
+            clog.error("IA no pudo interpretar el hilo de OPS; sigue pendiente: %s", resumir_error(e))
+            continue
         decision = resultado_ia["decision"]
         clog.info("OPS: %s → decisión %s", _truncar(respuesta_ops, 150), decision)
 

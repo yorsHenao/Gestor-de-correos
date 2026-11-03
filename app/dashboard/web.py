@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import ajustes, orquestador, scheduler
+from app import ajustes, login_lupe, orquestador, scheduler
 from app.alertas import pendientes as alertas_pendientes
 from config import CICLO_HORAS, DASHBOARD_PUERTO, DRIVE_SHEETS_ENTES_ID, DRIVE_SHEETS_ID
 
@@ -130,8 +130,10 @@ def inicio(request: Request):
         "inicio.html",
         proximo=scheduler.proximo_ciclo(),
         en_curso=en_curso,
-        refresco_seg=10 if en_curso else 0,
+        refresco_seg=10 if en_curso or login_lupe.en_curso() else 0,
         estado_lupe=_estado_lupe(),
+        login_lupe=login_lupe.estado(),
+        login_abierto=login_lupe.en_curso(),
         casos=_casos_por_estado(),
         pasos=[(nombre, _ETIQUETAS_PASOS.get(nombre, nombre)) for nombre in orquestador.ORDEN],
         ciclo_horas=CICLO_HORAS,
@@ -244,3 +246,14 @@ def accion_continuar():
     orquestador.confirmar_continuacion()
     log.info("Continuación confirmada desde el dashboard", **_EXTRA)
     return _volver()
+
+
+@app.post("/acciones/login-lupe")
+def accion_login_lupe():
+    login_lupe.lanzar()
+    return _volver()
+
+
+@app.get("/acciones/login-lupe/estado")
+def estado_login_lupe():
+    return {**login_lupe.estado(), "abierto": login_lupe.en_curso(), "sesion": _estado_lupe()}

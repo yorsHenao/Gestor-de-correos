@@ -1,28 +1,27 @@
-# Secretos
 .env
-data-json/token.json
+.env.*
+!.env.example
+token*.json
+__pycache__/
+.venv/
+data-json/casos/
 data-json/credentials.json
 data-json/Credentials.json
 
-# Entornos y caché
-venv/
-.venv/
-__pycache__/
-
-# Datos y sesiones locales
-data-json/casos/
-data/
+scripts/build/
+scripts/dist/
+*.rar
+*.zip
+dist/
+build/
+releases/
 logs/
+data/
+sesion.json
+session.json
 scripts/sesion.json
 lupe_profile*/
 lupe_profile*.lock
 lupe_profile*.lock.info
-
-# Builds y empaquetados
-scripts/build/
-scripts/dist/
-dist/
-build/
-releases/
-*.rar
-*.zip
+-- SQLite.sql
+respuestas/

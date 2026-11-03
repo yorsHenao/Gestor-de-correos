@@ -18,7 +18,7 @@ _ESPERAS_LIMITE = (1, 2, 4)
 _TOPE_ESPERA = 20
 _REINTENTO = re.compile(r"try again in\s+([\d.]+)\s*(ms|s)?", re.IGNORECASE)
 _cliente_gemini = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-_cliente_groq = Groq(api_key=GROQ_API_KEY2 or GROQ_API_KEY)
+_cliente_groq = Groq(api_key=GROQ_API_KEY2 or GROQ_API_KEY) if (GROQ_API_KEY2 or GROQ_API_KEY) else None
 
 
 def _parsear_json(texto):
@@ -42,6 +42,8 @@ def _llamar_gemini(prompt, system):
 
 
 def _llamar_groq(prompt, system):
+    if _cliente_groq is None:
+        raise RuntimeError("GROQ_API_KEY no está configurada")
     respuesta = _cliente_groq.chat.completions.create(
         model=_GROQ_MODEL,
         messages=[

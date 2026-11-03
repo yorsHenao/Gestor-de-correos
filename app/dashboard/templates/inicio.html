@@ -24,9 +24,16 @@
       {% elif estado_lupe == "sin_perfil" %}<span class="estado aviso">Sin perfil</span>
       {% else %}<span class="estado omitido">{{ estado_lupe }}</span>{% endif %}
     </div>
-    {% if estado_lupe in ("requiere_login", "sin_perfil") %}
-      <div class="suave">En este PC: <code>python main.py login</code></div>
-    {% endif %}
+    {% set lupe_caida = estado_lupe in ("requiere_login", "sin_perfil") or login_lupe.estado == "error" %}
+    <div class="fila-botones" style="margin-top: 10px;">
+      <form class="inline" method="post" action="/acciones/login-lupe">
+        <button type="submit" class="{% if lupe_caida %}activo{% else %}secundario{% endif %}" {% if login_abierto %}disabled{% endif %}>Iniciar sesión</button>
+      </form>
+      {% if login_abierto %}<span class="estado omitido">Abriendo…</span>
+      {% elif login_lupe.estado == "ok" %}<span class="estado ok">Sesión iniciada</span>
+      {% elif login_lupe.estado == "ocupado" %}<span class="estado aviso">Lupe en uso</span>
+      {% elif login_lupe.estado == "error" %}<span class="estado error">No se completó</span>{% endif %}
+    </div>
   </div>
 </div>
 

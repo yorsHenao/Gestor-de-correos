@@ -203,11 +203,7 @@ def generar_borrador(ruta_caso, formato="bloqueado", foto_bytes=None):
     fecha = date.today().strftime("%d de %B de %Y")
     correo = informacion["correo"]
     correo_rt = informacion.get("lupe", {}).get("correo") or correo.get("correo_rt", "")
-    correo_peticionario = (
-        correo.get("correo_peticionario")
-        or correo.get("correo_remitente")
-        or correo.get("remitente_email", "")
-    )
+    correo_peticionario = correo.get("correo_peticionario") or ""
 
     if formato == "terceros":
         reemplazos = [

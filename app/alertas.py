@@ -24,6 +24,7 @@ TIPOS = {
     "servicio": "Servicio Proyecto E",
 }
 
+_MAX_AVISOS = 50
 _avisos = []
 _enviados = set()
 
@@ -31,9 +32,10 @@ _enviados = set()
 def alertar(tipo, titulo, detalle="", ciclo_id=None):
     """Manda la alerta por los canales activos. Nunca lanza excepción."""
     del ciclo_id
-    if tipo in _enviados:
+    clave = (tipo, titulo)
+    if clave in _enviados:
         return False
-    _enviados.add(tipo)
+    _enviados.add(clave)
     anotar(tipo, titulo, detalle)
     texto = (detalle or "").replace("\n", " ")
     print(f"{MARCA}{tipo}\t{titulo}\t{texto}", flush=True)
@@ -50,6 +52,11 @@ def alertar(tipo, titulo, detalle="", ciclo_id=None):
     return True
 
 
+def nuevo_ciclo():
+    """Cada ciclo vuelve a avisar: la misma alerta solo se repite dentro de un ciclo."""
+    _enviados.clear()
+
+
 def anotar(tipo, titulo, detalle=""):
     _avisos.append({
         "tipo": tipo,
@@ -57,6 +64,7 @@ def anotar(tipo, titulo, detalle=""):
         "detalle": detalle or "",
         "fecha": datetime.now().strftime("%d/%m %H:%M"),
     })
+    del _avisos[:-_MAX_AVISOS]
 
 
 def anotar_desde_linea(linea):

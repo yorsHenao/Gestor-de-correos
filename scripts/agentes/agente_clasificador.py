@@ -171,3 +171,8 @@ ADJUNTOS:
     except Exception as error:
         log.debug("Error al clasificar correo: %s", error)
         raise ClassificationError(f"Error técnico al consultar la IA: {error}") from error
+
+
+if __name__ == "__main__":
+    print("Categorías disponibles:", obtener_categorias_predeterminadas())
+    print("Proveedor configurado:", obtener_info_ia()["ia_provider"])

@@ -20,7 +20,11 @@ SCOPES = [
 def autenticar():
     creds = None
     if os.path.exists(GOOGLE_TOKEN_FILE):
-        creds = Credentials.from_authorized_user_file(GOOGLE_TOKEN_FILE, SCOPES)
+        try:
+            creds = Credentials.from_authorized_user_file(GOOGLE_TOKEN_FILE, SCOPES)
+        except ValueError:
+            log.warning("Google: token.json dañado; hay que autorizar de nuevo")
+            os.remove(GOOGLE_TOKEN_FILE)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:

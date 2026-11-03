@@ -1,5 +1,6 @@
 import json
 import logging
+from email.utils import parseaddr
 from pathlib import Path
 
 from autenticar import autenticar
@@ -10,9 +11,27 @@ ESTADO_EN_SLACK = "En Slack - pendiente"
 ESTADOS_PENDIENTE_SLACK = frozenset({ESTADO_EN_SLACK, "En Slack"})
 ESTADOS_DUPLICADO_RT = ESTADOS_PENDIENTE_SLACK | {"Completado"}
 CIERRES_QA = frozenset({"Completado", "Caso manual"})
+TEXTO_PEDIR_CORREO = "pedir correo"
 
 SHEETS_ID = DRIVE_SHEETS_ID
 RUTA_MAPEO = Path(__file__).resolve().parent.parent / "data-json" / "mapeo-causales.json"
+
+
+def falta_correo_peticionario(correo):
+    """Vacío o @rappi.com: no es el correo de quien escribió."""
+    _, email = parseaddr(str(correo or ""))
+    candidato = (email or correo or "").strip().lower()
+    if "@" not in candidato or candidato == TEXTO_PEDIR_CORREO:
+        return True
+    return candidato.endswith("@rappi.com")
+
+
+def _correo_escrito_en_sheet(valor):
+    """Correo que QA puso en la columna B, si ya es de la persona."""
+    texto = str(valor or "").strip()
+    if falta_correo_peticionario(texto):
+        return ""
+    return texto
 
 
 def _sheets():
@@ -67,20 +86,32 @@ def sincronizar_cierres_qa():
     abiertos = {fila["mensaje_id"] for fila in registro.listar_casos_rt_abiertos()}
     if not abiertos or not SHEETS_ID:
         return
-    for fila in leer_rango(SHEETS_ID, "D:G"):
-        estado_sheet = str(fila[0]).strip() if fila else ""
-        mensaje = str(fila[3]).strip() if len(fila) > 3 else ""
-        if mensaje not in abiertos or estado_sheet not in CIERRES_QA:
+    for fila in leer_rango(SHEETS_ID, "B:G"):
+        correo_sheet = str(fila[0]).strip() if fila else ""
+        estado_sheet = str(fila[2]).strip() if len(fila) > 2 else ""
+        mensaje = str(fila[5]).strip() if len(fila) > 5 else ""
+        if mensaje not in abiertos:
             continue
         datos = registro.leer_caso_rt(mensaje)
         if not datos:
             continue
+        correo_nuevo = _correo_escrito_en_sheet(correo_sheet)
+        correo_cambio = False
+        if correo_nuevo:
+            actual = str((datos.get("correo") or {}).get("correo_peticionario") or "").strip()
+            if actual.lower() != correo_nuevo.lower():
+                datos.setdefault("correo", {})["correo_peticionario"] = correo_nuevo
+                correo_cambio = True
         if estado_sheet == "Caso manual":
             datos.setdefault("slack", {})["estado"] = "caso_manual"
             registro.guardar_caso_rt(datos, "Caso manual")
             continue
-        datos["completado"] = True
-        registro.guardar_caso_rt(datos, _estado_caso(datos))
+        if estado_sheet == "Completado":
+            datos["completado"] = True
+            registro.guardar_caso_rt(datos, _estado_caso(datos))
+            continue
+        if correo_cambio:
+            registro.guardar_caso_rt(datos, datos.get("estado") or _estado_caso(datos))
 
 
 def listar_pendientes_slack():
@@ -119,19 +150,22 @@ def _fila_sheet(datos):
     correo = datos.get("correo") or {}
     lupe = datos.get("lupe") or {}
     slack = datos.get("slack") or {}
-    nombre = (
-        lupe.get("nombre")
-        or correo.get("nombre_peticionario")
-        or correo.get("remitente_nombre")
-        or ""
-    )
-    email = (
-        correo.get("correo_peticionario")
-        or correo.get("correo_remitente")
-        or correo.get("remitente_email")
-        or ""
-    )
-    id_rt = lupe.get("id") or correo.get("id_rt") or ""
+    es_tercero = datos.get("tipo_caso") == 2
+    if es_tercero:
+        nombre = correo.get("nombre_peticionario") or correo.get("remitente_nombre") or ""
+        id_rt = correo.get("id_rt") or ""
+    else:
+        nombre = (
+            lupe.get("nombre")
+            or correo.get("nombre_peticionario")
+            or correo.get("remitente_nombre")
+            or ""
+        )
+        id_rt = lupe.get("id") or correo.get("id_rt") or ""
+    if falta_correo_peticionario(correo.get("correo_peticionario")):
+        email = TEXTO_PEDIR_CORREO
+    else:
+        email = correo.get("correo_peticionario") or ""
     return [
         nombre,
         email,

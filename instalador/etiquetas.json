@@ -1,0 +1,10 @@
+{
+  "_nota": "Nombres EXACTOS de las etiquetas de Gmail que crea o reutiliza el instalador. Se pueden cambiar aquí antes de correr INSTALAR.bat. Dos variables con el mismo nombre comparten la misma etiqueta.",
+  "GMAIL_LABEL_ID": "RTs-desbloqueo-cuentas",
+  "GMAIL_LABEL_REVISION_MANUAL": "Revisión-Manual",
+  "GMAIL_LABEL_ENTES": "Entes",
+  "GMAIL_LABEL_OTROS": "otros",
+  "GMAIL_LABEL_FACTURACION": "Revisión-Manual",
+  "GMAIL_LABEL_RESTAURANTES": "Restaurantes",
+  "GMAIL_LABEL_ELIMINAR_DEUDA_RTS": "Eliminar_deuda_rts"
+}

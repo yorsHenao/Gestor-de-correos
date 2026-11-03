@@ -170,7 +170,8 @@ def _cuenta_valida(datos, perfil, clave):
     Cédula o Soy Rappi del cuerpo identifican al RT si el nombre coincide (o no
     hay nombre_rt). El correo del From solo vale si el nombre coincide y la
     cédula del escrito no contradice la ficha. El teléfono no valida solo. Un
-    ID que abre a otra persona se descarta: no es rt_rl ni terceros.
+    ID que abre a otra persona no pasa esta validación: _buscar_cuenta lo
+    devuelve como tercero, salvo que el escrito ya sea rt_rl.
     """
     if clave == "telefono":
         return False
@@ -270,33 +271,27 @@ def _perfil_anonimizado(perfil):
 
 
 def _ruta_despues_lupe(perfil, tipo_caso=1):
-    """Qué hacer con el perfil abierto: atajo habilitado, Doc de terceros o Slack."""
+    """Qué hacer con el perfil abierto: atajo habilitado, carta de terceros o Slack."""
     if _perfil_anonimizado(perfil):
         return "revision_manual"
     if perfil.get("tercero_por_id") and tipo_caso != 3:
-        if perfil.get("estado") == "Habilitado":
-            return "terceros"
-        return "slack"
+        return "terceros"
     if perfil.get("estado") == "Habilitado":
         return "habilitado"
     return "slack"
 
 
 def _detectar_tipo_caso(informacion):
-    """Tipo 3 (RT + RL), 2 (tercero) o 1 (el propio RT).
+    """Tipo 3 (RT + RL) o 1 (el propio RT).
 
-    Solo cuentan las señales explícitas del escrito (firma, abogado o
-    representación). Un Gmail distinto no vuelve el caso rt_rl ni tercero: el RT
-    que pide en primera persona sigue tipo 1. Una ficha que no coincide con
-    `nombre_rt` se descarta antes y no llega aquí.
+    El tipo 2 solo lo marca tercero_por_id en _aplicar_tipo_caso. Un Gmail
+    distinto no vuelve el caso rt_rl ni tercero: el RT que pide en primera
+    persona sigue tipo 1. Cédula, correo o teléfono que abren a otra persona
+    se descartan antes y no llegan aquí.
     """
     tipo_representacion = informacion["correo"].get("tipo_representacion", "").lower()
     if tipo_representacion == "rt_rl":
         return 3
-    if tipo_representacion == "tercero":
-        return 2
-    if informacion["correo"].get("es_terceros") in (True, "true"):
-        return 2
     return 1
 
 
@@ -389,6 +384,15 @@ def _buscar_cuenta(page, datos_correo):
             return perfil, clave_filtro
         if _cuenta_valida(datos_correo, perfil, clave_filtro):
             return perfil, clave_filtro
+        if clave_filtro == "ID":
+            es_rl = str(datos_correo.get("tipo_representacion") or "").lower() == "rt_rl"
+            if not es_rl:
+                perfil["tercero_por_id"] = True
+            log.info(
+                "Lupe: el ID abre a otra persona (%s)",
+                "rt_rl, se conserva la ficha" if es_rl else "queda como tercero",
+            )
+            return perfil, clave_filtro
         log.info(
             "Lupe: cuenta descartada (%s), no coincide con la petición (%s)",
             clave_filtro,
@@ -396,6 +400,17 @@ def _buscar_cuenta(page, datos_correo):
         )
 
     return None, None
+
+
+def _dejar_sin_correo_peticionario(ruta_caso, informacion, clog, motivo):
+    """No hay correo de quien escribió: revisión manual, sin respuesta."""
+    informacion.setdefault("slack", {})["estado"] = "caso_manual"
+    storage.guardar_caso(ruta_caso, informacion)
+    clog.warning(
+        "Resultado: sin correo del peticionario (%s); a revisión manual",
+        motivo,
+    )
+    return "revision_manual"
 
 
 def consultar_lupe(ruta_caso, page=None):
@@ -427,6 +442,10 @@ def _consultar_caso(ruta_caso, page):
 
     perfil, _clave = _buscar_cuenta(page, informacion["correo"])
     if not perfil:
+        if storage.falta_correo_peticionario(informacion["correo"].get("correo_peticionario")):
+            return _dejar_sin_correo_peticionario(
+                ruta_caso, informacion, clog, "sin cuenta"
+            )
         enviado = enviar_correo_no_encontrado(ruta_caso, dato_busqueda)
         informacion["cuenta_no_encontrada"] = True
         informacion["completado"] = enviado
@@ -463,6 +482,16 @@ def _consultar_caso(ruta_caso, page):
     ruta = _ruta_despues_lupe(perfil, tipo_caso)
 
     if ruta == "habilitado":
+        if storage.falta_correo_peticionario(informacion["correo"].get("correo_peticionario")):
+            informacion["lupe"]["nombre"] = nombre
+            informacion["lupe"]["estado"] = estado
+            informacion["lupe"]["correo"] = correo_lupe
+            informacion["lupe"]["documento"] = perfil["documento"]
+            informacion["lupe"]["id"] = informacion["correo"].get("id_rt", "")
+            informacion["lupe"]["regla_bloqueo"] = ""
+            return _dejar_sin_correo_peticionario(
+                ruta_caso, informacion, clog, "cuenta ya habilitada"
+            )
         foto_bytes = _capturar_perfil(page, ruta_caso)
 
         informacion = storage.leer_caso(ruta_caso)
@@ -493,14 +522,12 @@ def _consultar_caso(ruta_caso, page):
         return
 
     if ruta == "terceros":
-        informacion["lupe"]["nombre"] = nombre
-        informacion["lupe"]["estado"] = estado
-        informacion["lupe"]["correo"] = correo_lupe
-        informacion["lupe"]["documento"] = perfil["documento"]
-        informacion["lupe"]["id"] = informacion["correo"].get("id_rt", "")
-        informacion["lupe"]["regla_bloqueo"] = ""
         informacion["correo"]["tipo_representacion"] = "tercero"
         informacion["tipo_caso"] = 2
+        if storage.falta_correo_peticionario(informacion["correo"].get("correo_peticionario")):
+            return _dejar_sin_correo_peticionario(
+                ruta_caso, informacion, clog, "tercero"
+            )
         storage.guardar_caso(ruta_caso, informacion)
         from generar_borrador import generar_borrador
 

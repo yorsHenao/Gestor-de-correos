@@ -1,6 +1,6 @@
 """
 
-Orden fijo del ciclo: clasificar, rt, slack, entes. 
+Orden fijo del ciclo: clasificar → rt → slack → entes. RT, Slack 
 
 Códigos de salida de los pasos:
 - 0: bien (aviso si el resumen trae errores).
@@ -26,7 +26,7 @@ for ruta in (str(RAIZ), str(SCRIPTS)):
         sys.path.insert(0, ruta)
 
 from app import registro
-from app.alertas import alertar
+from app.alertas import alertar, nuevo_ciclo
 from flow_control import FLAG_DETENER, limpiar_detener, solicitar_detener
 
 log = logging.getLogger("proyecto_e")
@@ -41,7 +41,7 @@ ORDEN = ["clasificar", "rt", "slack", "entes"]
 
 CODIGO_LOGIN = 20
 CODIGO_OCUPADO = 21
-TIMEOUT_PASO_SEG = int(float(os.getenv("PASO_TIMEOUT_MIN", "120")) * 60)
+TIMEOUT_PASO_SEG = int(float(os.getenv("PASO_TIMEOUT_MIN") or "120") * 60)
 FLAG_PAUSA = RAIZ / "logs" / "servicio.pausado"
 FLAG_ESPERANDO = RAIZ / "logs" / "revision.esperando"
 FLAG_CONTINUAR = RAIZ / "logs" / "revision.continuar"
@@ -303,7 +303,12 @@ def _ciclo(origen, pasos, eco):
     from utils.config_manager import validar_criticos
 
     _cortar_ciclo = False
-    registro.marcar_ultimo_ciclo()
+    nuevo_ciclo()
+    try:
+        registro.marcar_ultimo_ciclo()
+    except Exception as error:
+        alertar("paso_error", "Base de datos local con problemas", str(error))
+        log.error("No se pudo registrar el ciclo en runs.db: %s", error, **_extra())
     FLAG_ESPERANDO.unlink(missing_ok=True)
     FLAG_CONTINUAR.unlink(missing_ok=True)
     _confirmar.clear()

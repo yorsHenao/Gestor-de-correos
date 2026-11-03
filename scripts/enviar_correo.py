@@ -104,11 +104,7 @@ def enviar_correo_no_encontrado(ruta_caso, dato_busqueda):
     message_id = informacion["correo"]["message_id"]
     thread_id = informacion["correo"]["thread_id_gmail"]
     nombre = informacion["correo"].get("nombre_peticionario") or informacion["correo"].get("remitente_nombre", "")
-    correo = (
-        informacion["correo"].get("correo_peticionario")
-        or informacion["correo"].get("correo_remitente")
-        or informacion["correo"].get("remitente_email", "")
-    )
+    correo = informacion["correo"].get("correo_peticionario") or ""
 
     creds = autenticar()
     servicio = build("gmail", "v1", credentials=creds)
@@ -165,11 +161,7 @@ def enviar_cuenta_habilitada(ruta_caso, foto_bytes, crear_borrador=False):
     remitente_nombre = (
         informacion["correo"].get("nombre_peticionario") or nombre_rt
     ).title()
-    remitente_email = (
-        informacion["correo"].get("correo_peticionario")
-        or informacion["correo"].get("correo_remitente")
-        or informacion["correo"].get("remitente_email", "")
-    )
+    remitente_email = informacion["correo"].get("correo_peticionario") or ""
     correo_rt = informacion.get("lupe", {}).get("correo") or informacion["correo"].get("correo_rt", "")
 
     servicio = build("gmail", "v1", credentials=autenticar())
@@ -185,7 +177,7 @@ def enviar_cuenta_habilitada(ruta_caso, foto_bytes, crear_borrador=False):
             remitente_nombre, nombre_rt, correo_rt
         )
     else:
-        html_cuerpo = cuenta_habilitada(nombre_rt, correo_rt)
+        html_cuerpo = cuenta_habilitada(nombre_rt, remitente_email)
 
     msg = _construir_mensaje_habilitado(asunto, html_cuerpo, message_id, foto_bytes)
     return entregar(servicio, msg, thread_id)
@@ -238,11 +230,7 @@ def enviar_correo(ruta_caso, crear_borrador=False):
         or nombre_rt
     ).title()
     remitente_nombre = nombre_peticionario
-    remitente_email = (
-        informacion["correo"].get("correo_peticionario")
-        or informacion["correo"].get("correo_remitente")
-        or informacion["correo"].get("remitente_email", "")
-    )
+    remitente_email = informacion["correo"].get("correo_peticionario") or ""
 
     creds = autenticar()
     servicio = build("gmail", "v1", credentials=creds)
@@ -265,8 +253,7 @@ def enviar_correo(ruta_caso, crear_borrador=False):
         cuerpo = _cuerpo_original(remitente_nombre, "Señor/a")
     elif informacion.get("pdf_drive_id"):
         pdf_bytes = _descargar_pdf(drive, informacion["pdf_drive_id"])
-        correo_rt = informacion.get("lupe", {}).get("correo") or informacion["correo"].get("correo_rt", "")
-        cuerpo = _cuerpo_original(nombre_rt, "Señor/a", correo_rt)
+        cuerpo = _cuerpo_original(nombre_rt, "Señor/a", remitente_email)
     else:
         log.error("Correo: falta el PDF de respuesta (tipo_caso=%s)", tipo_caso)
         return False

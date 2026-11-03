@@ -194,16 +194,21 @@ def _procesar_cola(lupe):
     for mensaje in mensajes:
         comprobar_detener("Parada antes del siguiente correo RT.")
         contadores["procesados"] += 1
-        msg = (
-            servicio.users()
-            .messages()
-            .get(
-                userId="me",
-                id=mensaje["id"],
-                format="full",
+        try:
+            msg = (
+                servicio.users()
+                .messages()
+                .get(
+                    userId="me",
+                    id=mensaje["id"],
+                    format="full",
+                )
+                .execute()
             )
-            .execute()
-        )
+        except Exception as error:
+            errores += 1
+            log.error("No se pudo leer el correo %s; queda sin leer para la siguiente ronda: %s", mensaje["id"], error)
+            continue
 
         headers = msg["payload"]["headers"]
         message_id = next((h["value"] for h in headers if h["name"] == "Message-ID"), "")
@@ -229,10 +234,14 @@ def _procesar_cola(lupe):
             continue
         fecha_raw = next((h["value"] for h in headers if h["name"] == "Date"), None)
 
-        if mensaje_tiene_pdf_o_word(msg):
-            cuerpo, adjuntos = extraer_contenido(msg, servicio, incluir_adjuntos=True)
-        else:
-            cuerpo, adjuntos = extraer_contenido(msg, servicio, incluir_adjuntos=False)
+        try:
+            cuerpo, adjuntos = extraer_contenido(
+                msg, servicio, incluir_adjuntos=mensaje_tiene_pdf_o_word(msg)
+            )
+        except Exception as error:
+            errores += 1
+            log_caso(log, remitente_email).error("No se pudo leer el contenido del correo; queda sin leer: %s", error)
+            continue
         fecha = _fecha_en_espanol(_fecha_peticion(cuerpo, fecha_raw))
 
         _, correo_peticionario = _obtener_peticionario(
@@ -255,19 +264,26 @@ def _procesar_cola(lupe):
 
         texto_extraer = f"{cuerpo} {adjuntos}".strip()
 
-        resultado_ia = extractor.extraer(asunto, texto_extraer)
+        try:
+            resultado_ia = extractor.extraer(asunto, texto_extraer)
+        except Exception as error:
+            errores += 1
+            log_caso(log, correo_peticionario or remitente_email).error(
+                "IA no disponible para extraer el caso; el correo sigue sin leer para la siguiente ronda: %s", error
+            )
+            continue
 
         datos = {
             "completado": False,
             "correo": {
                 "asunto": asunto,
                 "correo_rt": resultado_ia.get("correo_rt", ""),
-                "correo_peticionario": resultado_ia.get("correo_peticionario") or remitente_email,
+                "correo_peticionario": resultado_ia.get("correo_peticionario") or "",
                 "nombre_peticionario": resultado_ia.get("nombre_peticionario") or remitente_nombre,
                 "nombre_rt": resultado_ia.get("nombre_rt", ""),
                 "remitente_email": remitente_email,
                 "fecha_recibido": fecha,
-                "peticion": _truncar(resultado_ia["peticion"], 200),
+                "peticion": _truncar(resultado_ia.get("peticion") or "", 200),
                 "telefono": resultado_ia.get("telefono", ""),
                 "id_rt": resultado_ia.get("id_rt", ""),
                 "numero_documento": resultado_ia.get("numero_documento", ""),

@@ -448,3 +448,8 @@ def salir_por_lupe(error):
     nivel = log.error if isinstance(error, LupeSesionRequerida) else log.warning
     nivel("Lupe: %s", error)
     sys.exit(error.codigo)
+
+
+if __name__ == "__main__":
+    print(f"Perfil: {LUPE_PROFILE_DIR}")
+    print(f"Estado de la sesión: {estado_sesion()}")
