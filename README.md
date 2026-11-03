@@ -97,7 +97,6 @@ Proyecto_E/
     ├── instalar_gestor_correos.ps1   # Script PowerShell de aprovisionamiento
     ├── gestor_correos_control.pyw    # Interfaz gráfica de escritorio (Tkinter) + bandeja del sistema
     ├── gestor_correos.ico            # Ícono de la aplicación
-    └── INSTRUCCIONES_OTRO_PC.md      # Guía rápida para instalar el panel en otro equipo Windows
 ```
 
 > **Nota:** Las carpetas `data/` (base de datos local `runs.db` y candados `.lock`) y `logs/` (`proyecto_e.log`, estado de sesión de Lupe y banderas de control) se crean automáticamente en la primera ejecución y están excluidas en `.gitignore`.
