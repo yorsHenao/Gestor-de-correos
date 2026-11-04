@@ -50,7 +50,6 @@ _NO_CAPTURAR = (DetenerFlujo, LupeSesionRequerida, LupeOcupado)
 COMPLETADO = "completados"
 REVISION = "revision_manual"
 ERROR = "errores"
-PEDIR_INFO = "pedir_info"
 SIN_CORREO = "sin_correo"
 OMITIDO = "omitido"
 EXTRANJERO = "extranjero"
@@ -65,7 +64,6 @@ def procesar_entes():
         COMPLETADO: 0,
         REVISION: 0,
         ERROR: 0,
-        PEDIR_INFO: 0,
         SIN_CORREO: 0,
         EXTRANJERO: 0,
     }
@@ -133,7 +131,7 @@ def _procesar_mensaje(contexto, mensaje_id, carpeta, fila):
     clog = log_caso(log, mensaje_id)
     hueco = registro.leer_hueco(mensaje_id)
     if hueco:
-        return _cerrar_hueco(mensaje_id, hueco, clog)
+        return _cerrar_hueco(contexto, mensaje_id, hueco, clog)
     if fila:
         accion = hoja.accion_fila(fila.get("estado"), fila.get("completado"))
         if accion == "cerrar":
@@ -181,7 +179,7 @@ def _procesar_mensaje(contexto, mensaje_id, carpeta, fila):
     campos = formulario.armar_formulario(
         datos, lupe, mensaje.get("pdfs") or [], contexto["correo_agente"]
     )
-    if lupe.get("rama") == "pedir_info":
+    if lupe.get("rama") == "sin_info":
         clog.info("Sin información de la cuenta: formulario con ID Orden e ID Usuario en 0")
         registro_caso["id_usuario"] = "0"
     else:
@@ -240,7 +238,7 @@ def _enviar_con_reintento(playwright, campos, clog):
     return envio
 
 
-def _cerrar_hueco(mensaje_id, hueco, clog):
+def _cerrar_hueco(contexto, mensaje_id, hueco, clog):
     registro_caso = {
         "peticionario": hueco.get("peticionario") or "",
         "correo": hueco.get("correo") or "",
@@ -250,20 +248,16 @@ def _cerrar_hueco(mensaje_id, hueco, clog):
         "mensaje_id": mensaje_id,
     }
     motivo = hueco.get("motivo") or ""
-    if motivo == "pedir_info_borrador":
-        cerrado = hoja.anotar_estado(registro_caso, hoja.ESTADO_MAS_INFO, clog)
-    elif motivo == "pedir_info_enviado":
-        cerrado = hoja.cerrar_caso(registro_caso, hoja.ESTADO_MAS_INFO_ENVIADO, clog)
-    else:
-        cerrado = False
-        resultado = _cerrar_enviado(mensaje_id, registro_caso, clog)
-        if resultado == COMPLETADO:
-            return COMPLETADO
-        return ERROR
-    if cerrado:
-        registro.borrar_hueco(mensaje_id)
-        clog.info("Pedido de información ya preparado; no se crea otro correo")
-    return PEDIR_INFO
+    if motivo != "enviado":
+        # Hueco antiguo de un pedido de información por correo (flujo retirado):
+        # no se cierra como enviado ni se crea correo o formulario; va a revisión manual.
+        clog.warning("Hueco antiguo con motivo %s: se borra y el caso va a revisión manual", motivo)
+        return _a_revision(
+            contexto, mensaje_id, registro_caso, f"Hueco antiguo ({motivo}) del pedido de información retirado", clog
+        )
+    if _cerrar_enviado(mensaje_id, registro_caso, clog) == COMPLETADO:
+        return COMPLETADO
+    return ERROR
 
 
 def _cerrar_enviado(mensaje_id, registro_caso, clog):
@@ -371,7 +365,7 @@ def _resolver_busqueda(lupe, datos, clog):
             caso_log=clog,
         )
         if busqueda == "orden" and resultado.get("rama") == "sin_cuenta":
-            resultado["rama"] = "pedir_info"
+            resultado["rama"] = "sin_info"
         return resultado
 
     try:

@@ -29,11 +29,11 @@ ENVIO_INCIERTO = "incierto"
 def armar_formulario(datos, lupe, pdfs, correo_agente):
     """Valores de cada casilla.
 
-    Sin información de la cuenta (rama pedir_info) el formulario se envía igual:
+    Sin información de la cuenta (rama sin_info) el formulario se envía igual:
     ID Orden e ID Usuario en 0 y el valor que diga el correo, o 0.
     """
     lupe = lupe or {}
-    sin_info = lupe.get("rama") == "pedir_info"
+    sin_info = lupe.get("rama") == "sin_info"
 
     correo_agente = (correo_agente or "").strip()
     peticionario = (datos.get("correo_peticionario") or "").strip()

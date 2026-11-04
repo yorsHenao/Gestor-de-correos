@@ -627,7 +627,7 @@ deploy\DESINSTALAR_GESTOR_CORREOS.bat
 Se crea automáticamente en el primer arranque (no requiere migraciones manuales ni importar casos antiguos) y contiene tres tablas:
 - `ultimo_ciclo`: Guarda la marca de tiempo (`inicio`) del último ciclo iniciado para respetar el intervalo `CICLO_HORAS` incluso si se reinicia el computador.
 - `casos_rt`: Almacena el expediente completo de cada caso RT (`mensaje_id`, `id_rt`, `estado`, `regla_bloqueo`, `thread_slack` y payload JSON), permitiendo detectar duplicados y cruzar decisiones de Slack.
-- `hueco_entes`: Registra los casos de Entes a los que se les solicitó información adicional para retomar su gestión cuando haya novedades.
+- `hueco_entes`: Registra los casos de Entes cuyo formulario ya salió pero falló la escritura en la hoja, para cerrar solo la fila en la siguiente ronda sin reenviar.
 
 ### Archivos de Log y Candados
 

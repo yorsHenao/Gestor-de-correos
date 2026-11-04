@@ -77,7 +77,7 @@ def consultar_cuenta(
         clog.info(
             "Lupe: cuenta descartada, la ficha no coincide con la petición (%.1f s)", segundos
         )
-        return _vacio("pedir_info")
+        return _vacio("sin_info")
     id_usuario = _leer_id_cuenta(page)
     clog.info("Lupe: cuenta validada, id usuario %s (%.1f s)", id_usuario or "?", segundos)
     if not abrir_ordenes:

@@ -7,8 +7,6 @@ _REINTENTO = re.compile(r"reintento\s+(\d+)", re.I)
 
 ESTADO_ENVIADO_ENTES = "enviado a Entes"
 ESTADO_REVISION = "revisión manual"
-ESTADO_MAS_INFO = "- se pide mas información"
-ESTADO_MAS_INFO_ENVIADO = "Se pide mas información- Correo enviado"
 ESTADO_SIN_CORREO = "- sin correo- solicitarlo"
 
 
