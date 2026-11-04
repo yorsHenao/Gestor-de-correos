@@ -27,9 +27,13 @@ ENVIO_INCIERTO = "incierto"
 
 
 def armar_formulario(datos, lupe, pdfs, correo_agente):
-    """Valores de cada casilla. Si la rama pide más información, no se llena."""
-    if (lupe or {}).get("rama") == "pedir_info":
-        return {"llenar": False, "motivo": "pedir_info"}
+    """Valores de cada casilla.
+
+    Sin información de la cuenta (rama pedir_info) el formulario se envía igual:
+    ID Orden e ID Usuario en 0 y el valor que diga el correo, o 0.
+    """
+    lupe = lupe or {}
+    sin_info = lupe.get("rama") == "pedir_info"
 
     correo_agente = (correo_agente or "").strip()
     peticionario = (datos.get("correo_peticionario") or "").strip()
@@ -40,11 +44,11 @@ def armar_formulario(datos, lupe, pdfs, correo_agente):
         "correo_solicitante": correo_agente,
         "radicado": peticionario,
         "pais": PAIS,
-        "id_orden": _cero(lupe.get("id_orden")),
-        "id_usuario": _cero(lupe.get("id_usuario")),
+        "id_orden": "0" if sin_info else _cero(lupe.get("id_orden")),
+        "id_usuario": "0" if sin_info else _cero(lupe.get("id_usuario")),
         "correo_usuario": peticionario,
         "clase_acto": CLASE_ACTO,
-        "valor": _cero(lupe.get("valor_orden")),
+        "valor": _cero(datos.get("valor_peticion")) if sin_info else _cero(lupe.get("valor_orden")),
         "fecha_limite": _fecha_limite(datos.get("fecha_llegada_correo")),
         "medio_devolucion": MEDIO_DEVOLUCION,
         "archivos": archivos,

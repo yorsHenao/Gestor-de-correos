@@ -92,7 +92,8 @@ Responde SOLO con un JSON con esta estructura:
     "ubicacion_peticion": "cuerpo",
     "busqueda": "orden",
     "resumen": "El usuario pide el reembolso de un pedido que no recibió.",
-    "causal": "Problemas con el RT"
+    "causal": "Problemas con el RT",
+    "valor_peticion": "Monto en pesos que reclama el usuario; si no aparece, cadena vacía."
 }}
 
 Reglas:
@@ -121,6 +122,7 @@ Reglas:
   - "Solicito que por favor investiguen el pedido, la cuenta desde la cual se realizó, la fecha y hora de la transacción y cualquier información que permita verificar que no fui yo quien efectuó la compra." → ninguna, y la causal es "Cobros no reconocidos"
   - "No reconozco un cobro de $32.990 del 4 de octubre." Sin negar que fue quien compró ni pedir verificar que no fue él → cuenta, y la causal es "Cobros no reconocidos"
 - resumen: una o dos frases, en español, con lo que pide el usuario. Di siempre "el usuario". No escribas nombres ni apellidos de personas, ni "el cliente", ni "la cliente". No inventes ids, montos ni tiendas.
+- valor_peticion: solo el monto que el usuario reclama o pide devolver, tal como lo escribe (ej. 32.990). No inventes montos; si no hay, cadena vacía.
 - causal es solo el nombre de la lista para la hoja. Cópialo tal cual, sin cambiar mayúsculas, tildes ni signos. Elige uno:
 {chr(10).join(f"  - {nombre}" for nombre in CAUSALES)}
 
@@ -160,6 +162,7 @@ def _normalizar(resultado, fecha_correo, cuerpo, adjuntos, texto_pdf, remitente,
         "busqueda": _busqueda(resultado.get("busqueda")),
         "resumen": _frase(_texto(resultado.get("resumen"))),
         "causal": _causal(resultado.get("causal")),
+        "valor_peticion": _monto(resultado.get("valor_peticion")),
         "nombre_peticionario": "",
     }
     correo = datos["correo_peticionario"]
@@ -269,6 +272,15 @@ def _frase(texto):
     if not texto:
         return ""
     return texto[0].upper() + texto[1:]
+
+
+def _monto(valor):
+    """Monto en pesos solo con dígitos: "$32.990,00" -> "32990". Vacío si no hay."""
+    texto = re.sub(r"[^\d.,]", "", _texto(valor))
+    if re.search(r"[.,]\d{2}$", texto) and not re.search(r"[.,]\d{3}$", texto):
+        texto = texto[:-3]
+    digitos = re.sub(r"\D", "", texto)
+    return digitos.lstrip("0") or ""
 
 
 def _texto(valor):

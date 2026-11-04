@@ -32,7 +32,7 @@ El sistema ejecuta un ciclo secuencial compuesto por cuatro etapas en orden fijo
 | **1** | `clasificar` | `scripts/clasificar_correos_gmail.py` | Lee los correos sin leer del buzón de Gmail, extrae el cuerpo y los adjuntos (PDF, Word `.docx` e imágenes mediante OCR local con `rapidocr-onnxruntime`) y los clasifica con IA (`Groq` o `Gemini`) aplicando la etiqueta correspondiente en Gmail (*RT bloqueado*, *Entes*, *Eliminar deudas RTs*, *Facturación*, *Restaurantes*, *Otros* o *Revisión manual*). |
 | **2** | `rt` | `scripts/agentes/agente_rts.py lupe` (`scripts/procesar_correos_rt.py`) | Toma los correos sin leer etiquetados como **RT bloqueado** (`GMAIL_LABEL_ID`), descarta falsos positivos, extrae los datos del Rappitendero con IA, evita duplicados del mismo `id_rt` y consulta la cuenta en **Lupe** por orden de prioridad (*ID RT → Cédula → Correo → Teléfono*). Si la cuenta no existe, responde pidiendo datos de registro; si está habilitada, toma captura y responde; si el ID corresponde a otra persona y está habilitada, genera el documento de terceros; y si está bloqueada, registra el caso en la hoja de Google Sheets (`DRIVE_SHEETS_ID`) y lo publica en **Slack** para decisión de OPS. |
 | **3** | `slack` | `scripts/agentes/agente_rts.py slack` (`scripts/leer_slack.py`) | Sincroniza cierres manuales hechos por QA en Google Sheets y revisa los hilos de Slack en estado `En Slack - pendiente`. Interpreta con IA la decisión de OPS: si se **mantiene el bloqueo**, mapea la regla con `data-json/mapeo-causales.json`, crea el documento legal en Drive a partir de la plantilla de Google Docs (con o sin imagen de prueba), lo exporta a PDF en Drive y responde en el hilo de Gmail; si se **habilita la cuenta**, verifica en Lupe el estado activo, toma captura de pantalla y envía la respuesta con la evidencia embebida. |
-| **4** | `entes` | `scripts/procesar_entes.py` | Procesa la cola de correos sin leer con etiqueta **Entes** (`GMAIL_LABEL_ENTES`). Extrae datos del peticionario y adjuntos con IA, consulta al usuario y sus órdenes en **Lupe**, solicita información adicional por correo cuando faltan datos de identificación, o imprime el correo/adjuntos a PDF en una carpeta temporal local (máx. 10 archivos y `< 50 MB`) para diligenciar y radicar automáticamente el formulario web de **Entes**, actualizando la hoja de seguimiento (`DRIVE_SHEETS_ENTES_ID`). |
+| **4** | `entes` | `scripts/procesar_entes.py` | Procesa la cola de correos sin leer con etiqueta **Entes** (`GMAIL_LABEL_ENTES`). Extrae datos del peticionario y adjuntos con IA, consulta al usuario y sus órdenes en **Lupe**, si no encuentra la cuenta envía igual el formulario con ID Orden e ID Usuario en 0 y el valor que indique el correo (o 0); los casos con teléfono de otro país van a revisión manual desde el clasificador. Imprime el correo/adjuntos a PDF en una carpeta temporal local (máx. 10 archivos y `< 50 MB`) para diligenciar y radicar automáticamente el formulario web de **Entes**, actualizando la hoja de seguimiento (`DRIVE_SHEETS_ENTES_ID`). |
 
 ---
 
@@ -81,7 +81,6 @@ Proyecto_E/
 │       ├── hoja.py                   # Lectura y escritura en el Google Sheet de Entes
 │       ├── imagenes.py               # OCR y análisis de capturas adjuntas en correos de Entes
 │       ├── lupe.py                   # Búsqueda de usuarios y órdenes en Lupe para Entes
-│       └── pedir_info.py             # Solicitud automática de datos adicionales al peticionario
 ├── utils/                            # Utilidades transversales
 │   ├── config_manager.py             # Validación de variables críticas antes de iniciar pasos o servicio
 │   ├── logger.py                     # Formato unificado de logs en consola y en logs/proyecto_e.log
@@ -339,7 +338,7 @@ https://docs.google.com/spreadsheets/d/1XyZ987654321aBcDeFgHiJkLmNoPqRsTuVw/edit
 | **C** | `id usuario` | ID del usuario en Lupe (o `0` si no se encontró cuenta). | El bot (`entes/hoja.py`) |
 | **D** | `fecha peticion` | Fecha de la petición (`YYYY-MM-DD`). | El bot (`entes/hoja.py`) |
 | **E** | `causal` | Causal clasificada por el agente de IA de Entes (o `Otro`). | El bot (`entes/hoja.py`) |
-| **F** | `estado` | Resultado de la gestión: `enviado a Entes`, `revisión manual`, `- se pide mas información`, `Se pide mas información- Correo enviado`, `- sin correo- solicitarlo`, o `Error de envío - reintento 1/2/3`. | El bot (`entes/hoja.py`) |
+| **F** | `estado` | Resultado de la gestión: `enviado a Entes`, `revisión manual`, `- se pide mas información`, `Se pide mas información- Correo enviado`, `- sin correo- solicitarlo` (los dos estados de «se pide mas información» solo quedan en casos antiguos), o `Error de envío - reintento 1/2/3`. | El bot (`entes/hoja.py`) |
 | **G** | `Id - Gmail` | `mensaje_id` único de Gmail. **Actúa como llave primaria de la fila.** | El bot (`entes/hoja.py`) |
 | **H** | `flujo completo` | Cierre manual de revisión: escribir `completado`. | **Exclusivo de QA** (el programa nunca pisa la columna `H`). |
 

@@ -26,7 +26,6 @@ from entes import formulario, hoja
 from entes.correo import correo_agente, leer_mensaje, listar_ids_entes
 from entes.imagenes import completar_con_imagenes
 from entes.lupe import consultar_cuenta
-from entes.pedir_info import pedir_informacion
 from flow_control import DetenerFlujo, comprobar_detener
 from gmail_cuerpo import bytes_parte
 from lupe_navegador import SesionLupe, salir_por_lupe
@@ -54,6 +53,7 @@ ERROR = "errores"
 PEDIR_INFO = "pedir_info"
 SIN_CORREO = "sin_correo"
 OMITIDO = "omitido"
+EXTRANJERO = "extranjero"
 
 
 def procesar_entes():
@@ -67,6 +67,7 @@ def procesar_entes():
         ERROR: 0,
         PEDIR_INFO: 0,
         SIN_CORREO: 0,
+        EXTRANJERO: 0,
     }
     if not ids:
         return resumen(log, **contadores)
@@ -170,20 +171,21 @@ def _procesar_mensaje(contexto, mensaje_id, carpeta, fila):
     registro_caso = _registro(datos, lupe, mensaje)
     if lupe.get("rama") == "error":
         return _fallo(contexto, mensaje_id, registro_caso, f"Lupe: {lupe.get('detalle')}", clog)
+    if lupe.get("rama") == "extranjero":
+        # Salvaguarda: el clasificador ya los manda a manual; si alguno llega, no se envía.
+        _a_revision(
+            contexto, mensaje_id, registro_caso, "Teléfono de otro país: no se gestiona en Entes", clog
+        )
+        return EXTRANJERO
 
     campos = formulario.armar_formulario(
         datos, lupe, mensaje.get("pdfs") or [], contexto["correo_agente"]
     )
-    registro_caso["id_usuario"] = lupe.get("id_usuario") or campos.get("id_usuario") or "0"
-    if not campos.get("llenar"):
-        peticion = {**mensaje, **datos, "formulario": {"registro": registro_caso}}
-        resultado_pedido = pedir_informacion(servicio, peticion, clog)
-        if resultado_pedido:
-            modo_pedido, cerrado = resultado_pedido
-            if not cerrado:
-                registro.guardar_hueco(mensaje_id, registro_caso, f"pedir_info_{modo_pedido}")
-            return PEDIR_INFO
-        return _fallo(contexto, mensaje_id, registro_caso, "No se pudo pedir la información", clog)
+    if lupe.get("rama") == "pedir_info":
+        clog.info("Sin información de la cuenta: formulario con ID Orden e ID Usuario en 0")
+        registro_caso["id_usuario"] = "0"
+    else:
+        registro_caso["id_usuario"] = lupe.get("id_usuario") or campos.get("id_usuario") or "0"
 
     playwright = contexto["lupe"].playwright()
     try:
@@ -354,8 +356,8 @@ def _resolver_busqueda(lupe, datos, clog):
         clog.info("Sin búsqueda en Lupe: dice no tener cuenta")
         return _lupe_vacio("no_usuario")
     if datos.get("telefono_extranjero"):
-        clog.info("Teléfono extranjero: se pide información")
-        return _lupe_vacio("pedir_info")
+        clog.info("Teléfono extranjero: va a revisión manual")
+        return _lupe_vacio("extranjero")
     def consultar():
         resultado = consultar_cuenta(
             lupe.pagina(),

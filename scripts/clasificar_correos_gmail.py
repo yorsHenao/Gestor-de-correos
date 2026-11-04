@@ -265,6 +265,25 @@ def _rt_sin_cola_operativa(texto):
     )
 
 
+_TEL_INTERNACIONAL = re.compile(
+    r"(?:(?<![\w+.,$])\+|(?<![\w.,$])00)\s?\d[\d\s().-]{6,}\d"
+)
+
+
+def _tiene_telefono_extranjero(texto):
+    """Teléfono con indicativo de otro país (+51, +1, 0052...). Colombia (+57) no cuenta."""
+    for hallado in _TEL_INTERNACIONAL.finditer(str(texto or "")):
+        crudo = hallado.group(0).strip()
+        digitos = re.sub(r"\D", "", crudo)
+        if crudo.startswith("00"):
+            digitos = digitos[2:]
+        if len(digitos) < 8:
+            continue
+        if not digitos.startswith("57"):
+            return True
+    return False
+
+
 def _decidir_etiqueta(resultado, texto=""):
     categorias = resultado.get("categorias", [])
     confianza  = resultado.get("confianza", 0)
@@ -298,6 +317,8 @@ def _decidir_etiqueta(resultado, texto=""):
     elif categoria == "entes":
         if _es_reclamo_aliado_operativo(texto):
             return LABEL_RESTAURANTES, "aliado operativo — reclamo_aliado"
+        if _tiene_telefono_extranjero(texto):
+            return LABEL_MANUAL, "teléfono de otro país → revisión manual"
         return LABEL_ENTES, "reclamo cliente final"
     elif categoria == "eliminar_deuda":
         if confianza >= CONFIANZA_MINIMA and LABEL_ELIMINAR_DEUDA_RTS:
