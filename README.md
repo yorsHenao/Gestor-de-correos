@@ -338,7 +338,7 @@ https://docs.google.com/spreadsheets/d/1XyZ987654321aBcDeFgHiJkLmNoPqRsTuVw/edit
 | **C** | `id usuario` | ID del usuario en Lupe (o `0` si no se encontró cuenta). | El bot (`entes/hoja.py`) |
 | **D** | `fecha peticion` | Fecha de la petición (`YYYY-MM-DD`). | El bot (`entes/hoja.py`) |
 | **E** | `causal` | Causal clasificada por el agente de IA de Entes (o `Otro`). | El bot (`entes/hoja.py`) |
-| **F** | `estado` | Resultado de la gestión: `enviado a Entes`, `revisión manual`, `- se pide mas información`, `Se pide mas información- Correo enviado`, `- sin correo- solicitarlo` (los dos estados de «se pide mas información» solo quedan en casos antiguos), o `Error de envío - reintento 1/2/3`. | El bot (`entes/hoja.py`) |
+| **F** | `estado` | Resultado de la gestión: `enviado a Entes`, `revisión manual`, `- sin correo- solicitarlo`, o `Error de envío - reintento 1/2/3`. | El bot (`entes/hoja.py`) |
 | **G** | `Id - Gmail` | `mensaje_id` único de Gmail. **Actúa como llave primaria de la fila.** | El bot (`entes/hoja.py`) |
 | **H** | `flujo completo` | Cierre manual de revisión: escribir `completado`. | **Exclusivo de QA** (el programa nunca pisa la columna `H`). |
 

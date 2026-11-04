@@ -35,8 +35,6 @@ _ORDEN_ENTES = (
     "Error de envío - reintento 1",
     "Error de envío - reintento 2",
     "Error de envío - reintento 3",
-    "- se pide mas información",
-    "Se pide mas información- Correo enviado",
     "enviado a Entes",
     "- sin correo- solicitarlo",
     "revisión manual",

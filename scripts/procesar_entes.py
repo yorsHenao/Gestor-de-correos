@@ -249,11 +249,10 @@ def _cerrar_hueco(contexto, mensaje_id, hueco, clog):
     }
     motivo = hueco.get("motivo") or ""
     if motivo != "enviado":
-        # Hueco antiguo de un pedido de información por correo (flujo retirado):
-        # no se cierra como enviado ni se crea correo o formulario; va a revisión manual.
-        clog.warning("Hueco antiguo con motivo %s: se borra y el caso va a revisión manual", motivo)
+        # Motivo desconocido: no se cierra como enviado ni se crea correo o formulario.
+        clog.warning("Hueco con motivo desconocido %s: se borra y el caso va a revisión manual", motivo)
         return _a_revision(
-            contexto, mensaje_id, registro_caso, f"Hueco antiguo ({motivo}) del pedido de información retirado", clog
+            contexto, mensaje_id, registro_caso, f"Hueco con motivo desconocido ({motivo})", clog
         )
     if _cerrar_enviado(mensaje_id, registro_caso, clog) == COMPLETADO:
         return COMPLETADO
