@@ -25,10 +25,21 @@ ENV = RAIZ / ".env"
 EJEMPLO = RAIZ / ".env.example"
 
 _CORREO = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_TOKEN_SLACK = re.compile(r"^xoxb-[A-Za-z0-9-]{15,}$")
+
+
+def _token_slack_valido(valor):
+    """Valida un token de bot aun si se pegó con comillas o BOM."""
+    valor = valor.strip().lstrip("\ufeff")
+    if len(valor) >= 2 and valor[0] == valor[-1] and valor[0] in "'\"":
+        valor = valor[1:-1].strip()
+    return bool(_TOKEN_SLACK.fullmatch(valor))
+
+
 # variable: (pregunta, validación, oculta)
 PREGUNTAS = {
-    "SLACK_BOT_TOKEN": ("Token del bot de Slack (te lo da Jeisembert, empieza por xoxb-)",
-                        lambda v: v.startswith("xoxb-") and len(v) > 20, True),
+    "SLACK_BOT_TOKEN": ("Inserte el Token del bot de Slack: ",
+                        _token_slack_valido, True),
     "GMAIL_REPLY_TO": ("Correo al que se responden los casos (GMAIL_REPLY_TO)",
                        lambda v: bool(_CORREO.match(v)), False),
 }
