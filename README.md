@@ -110,7 +110,7 @@ Antes de correr `INSTALAR.bat`, cada persona necesita:
 2. **Python 3.13 de 64 bits**, solicitado **por ticket** a Soporte/IT (el instalador no lo instala). Pide que quede con la opción *Add python.exe to PATH* o con el lanzador `py`.
 3. **Git**, también por ticket si no lo tienes (`git --version` debe responder).
 4. **Acceso de lectura al repositorio** para poder clonarlo y luego actualizar con `git pull`.
-5. **Tu propio `credentials.json`**: el JSON del cliente OAuth de tipo *Aplicación de escritorio* descargado de Google Cloud (ver [5.1](#51-proyecto-en-google-cloud-y-credentialsjson)). Puede tener cualquier nombre; el instalador lo pide con una ventana.
+5. **Tu propio `credentials.json`**: el JSON del cliente OAuth de tipo *Aplicación de escritorio* descargado de Google Cloud (ver [5.1](#51-proyecto-en-google-cloud-y-credentialsjson)). Guárdalo en `data-json/credentials.json`.
 6. **Tus claves de IA**: al menos una de **Groq** (`gsk_...`) o **Google Gemini** (`AIza...`). Son personales.
 7. **El token del bot de Slack** (`xoxb-...`), que **Jeisembert entrega personalmente** a cada persona. No se comparte por chat ni se guarda en el repositorio.
 8. Acceso a **Lupe** (`https://lupe.rappi.com/`) con tu cuenta de Google.
@@ -128,23 +128,25 @@ git clone https://github.com/yorsHenao/proyecto_E.git
 cd proyecto_E
 ```
 
-Luego haz **doble clic en `INSTALAR.bat`** (en la raíz del proyecto). Cada paso muestra `[OK]` o `[FALTA]` con la forma de arreglarlo. **Se puede correr las veces que quieras:** lo que ya está listo no se repite ni se duplica, y solo pregunta lo que falta o está mal. Si algo falla, termina con `INSTALACION INCOMPLETA` y la lista de pendientes; nunca dice que quedó instalado si algo falló.
+Luego haz **doble clic en `INSTALAR.bat`** (en la raíz del proyecto). Solo prepara el entorno de Python. Cada paso muestra `[OK]` o `[FALTA]`. **Se puede correr las veces que quieras:** si `.venv` ya es Python 3.13 no lo recrea; vuelve a instalar dependencias y Chromium. Si algo falla, termina con `INSTALACION INCOMPLETA`.
 
 | # | Paso | Automático / Manual |
 | :---: | :--- | :--- |
 | 1 | Revisa que existan Git, la carpeta clonada con Git y Python 3.13. Si falta Python, explica cómo pedirlo por ticket y se detiene. | Automático (la solicitud del ticket es manual) |
-| 2 | Crea `.venv`, instala `requirements.txt` (muestra los errores de pip) y el Chromium de Playwright. | Automático |
-| 3 | Crea `.env` desde `.env.example` y pide **solo** lo vacío o inválido: token del bot de Slack, correo `GMAIL_REPLY_TO` y claves Groq/Gemini. Lo que escribes en tokens y claves **no se ve en pantalla**. | Manual: escribir los valores |
-| 4 | Abre una ventana para elegir tu JSON de credenciales (cualquier nombre). Si no es un cliente OAuth válido, avisa y deja elegir otro. Lo copia a `data-json/credentials.json`. | Manual: elegir el archivo |
-| 5 | Autoriza Google en el navegador (Gmail, Drive, Docs, Sheets) y guarda `data-json/token.json`. | Manual: aceptar en el navegador |
-| 6 | Crea las etiquetas de Gmail del programa (o reutiliza las que ya tengan el mismo nombre) y guarda sus IDs en `.env`. | Automático |
-| 7 | Crea en **tu** Drive la carpeta `legal-ops` con sus subcarpetas, las 2 hojas de control con encabezados y las 5 plantillas (desde `plantillas/*.docx`, convertidas a Google Docs). No duplica, no borra y no comparte nada. | Automático |
-| 8 | Escribe en `.env` los IDs que estaban vacíos o inválidos. No borra nada. | Automático |
-| 9 | Ofrece iniciar sesión en Lupe (`python main.py login`). | Manual: iniciar sesión |
-| 10 | Corre el diagnóstico (`scripts/diagnostico.py`). | Automático |
-| 11 | Si todo salió bien, crea los accesos directos y prende el servicio (`deploy/instalar_gestor_correos.ps1`). | Automático |
+| 2 | Crea `.venv`, instala `requirements.txt` y el Chromium de Playwright. | Automático |
 
-**Etiquetas de Gmail** (nombres en `instalador/etiquetas.json`, se pueden cambiar ahí antes de instalar):
+El `.env`, Google, Drive, Lupe y el acceso directo **no** los hace `INSTALAR.bat`. Hazlos a mano después (secciones 5, 6, 7 y 10):
+
+1. Copia `.env.example` a `.env` y completa Slack, `GMAIL_REPLY_TO` y al menos una clave de IA.
+2. Pon `credentials.json` en `data-json/`.
+3. Crea en Gmail las etiquetas del programa (nombres en `instalador/etiquetas.json`) y en Drive la carpeta `legal-ops`, las 2 hojas y las 5 plantillas; pon sus IDs en `.env`.
+4. Autoriza Google y lista etiquetas: `.venv\Scripts\python.exe scripts\lector_etiquetas.py`.
+5. Inicia sesión en Lupe: `.venv\Scripts\python.exe main.py login`.
+6. Con el `.env` listo, corre `deploy\INSTALAR_GESTOR_CORREOS.bat` para el icono y el arranque.
+
+En VS Code o Cursor, al abrir el proyecto una terminal nueva queda con `.venv` activo (`.vscode/settings.json`). Fuera del editor, usa siempre `.venv\Scripts\python.exe` (no hace falta `Activate`).
+
+**Etiquetas de Gmail** (nombres en `instalador/etiquetas.json`):
 
 | Variable | Etiqueta |
 | :--- | :--- |
@@ -221,7 +223,7 @@ playwright install chromium
 
 ## ☁️ 5. Configuración de Google Workspace y Google Drive (Carpetas, Hojas y Plantillas)
 
-**`INSTALAR.bat` crea todo esto automáticamente en tu propio Drive** (paso 7 de la [sección 4](#41-instalación-recomendada)). Esta sección explica qué es cada cosa y sirve como **alternativa avanzada** si prefieres crearlo a mano o usar archivos existentes: en ese caso pon sus IDs en `.env` y el instalador los respetará.
+Esta sección explica qué crear en Drive y qué IDs poner en `.env`. Todo se hace a mano (o puedes correr `python -m instalador.instalar` si quieres la creación automática).
 
 ---
 
@@ -243,7 +245,7 @@ playwright install chromium
 
 ### 5.2. Estructura Sugerida en Google Drive
 
-Para mantener todo ordenado y fácil de administrar, el instalador crea en Google Drive esta estructura (si la haces a mano, usa la misma):
+Para mantener todo ordenado y fácil de administrar, usa en Google Drive esta estructura:
 
 ```text
 📁 legal-ops/
@@ -382,7 +384,7 @@ https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz1234567890/edit
 
 ## ⚙️ 6. Configuración de Variables de Entorno (`.env`)
 
-> `INSTALAR.bat` crea el `.env` a partir de `.env.example` (incluido en el repositorio, sin secretos) y lo completa solo. Esta sección es la **alternativa avanzada** para revisarlo o editarlo a mano. El `.env` nunca se sube a Git.
+> Copia `.env.example` a `.env` y complétalo a mano (o con `python -m instalador.instalar`). El `.env` nunca se sube a Git.
 
 Crea un archivo `.env` en la raíz del proyecto (`Proyecto_E/.env`).
 
@@ -504,14 +506,14 @@ ALERTAS_SLACK_CANAL=
 
 ## 🔐 7. Autenticación Inicial (Google OAuth y Sesión de Lupe)
 
-`INSTALAR.bat` ya hace estos dos pasos (autorizar Google y ofrecer el login de Lupe). Hazlos a mano solo si instalaste por la **alternativa avanzada** o si el diagnóstico los marca en `[FALTA]`, desde la terminal con el entorno virtual activo:
+Tras `INSTALAR.bat`, autoriza Google e inicia sesión en Lupe. En el editor la terminal ya trae `.venv` activo; fuera del editor usa la ruta completa:
 
 ### Paso 1: Autorizar las APIs de Google y obtener los IDs de etiquetas de Gmail
 
 Ejecuta el lector de etiquetas:
 
 ```bash
-python scripts/lector_etiquetas.py
+.venv\Scripts\python.exe scripts\lector_etiquetas.py
 ```
 
 1. La primera vez se abrirá el navegador solicitando autorizar la cuenta de Google para Gmail, Drive, Docs y Sheets.
@@ -523,7 +525,7 @@ python scripts/lector_etiquetas.py
 Ejecuta el comando de login de Lupe (o, con el servicio activo, pulsa **Iniciar sesión en Lupe** en el Dashboard):
 
 ```bash
-python main.py login
+.venv\Scripts\python.exe main.py login
 ```
 
 1. Se abrirá una ventana de Chromium utilizando el perfil persistente (`LUPE_PROFILE_DIR`).
@@ -592,7 +594,7 @@ La carpeta **`deploy/`** incluye un instalador portátil para Windows que config
 
 ### Instalación en 1 clic
 
-1. Si usaste `INSTALAR.bat`, este paso ya se hizo al final de la instalación. Úsalo a mano solo para reinstalar los accesos directos, con el `.venv`, `requirements.txt` y `.env` ya listos.
+1. Corre esto **después** de `INSTALAR.bat` y de tener el `.env` completo (`credentials.json`, IDs de Drive y Gmail).
 2. Entra a la carpeta **`deploy/`** y haz **doble clic** sobre:
    ```text
    INSTALAR_GESTOR_CORREOS.bat
@@ -654,7 +656,7 @@ Se crea automáticamente en el primer arranque (no requiere migraciones manuales
 | **No sé qué está fallando** | — | Corre `.venv\Scripts\python.exe scripts\diagnostico.py` y sigue lo que dice cada `[FALTA]`. |
 | **`INSTALAR.bat`: falta Python 3.13** | Python no está instalado o no está en el PATH. | Pídelo por ticket (Python 3.13 de 64 bits con *Add python.exe to PATH*) y vuelve a correr `INSTALAR.bat`. |
 | **El instalador dice que el JSON no sirve** | Elegiste un archivo que no es un cliente OAuth (por ejemplo una cuenta de servicio o un token). | Descarga en Google Cloud el JSON de *OAuth client ID* tipo *Aplicación de escritorio* y elígelo de nuevo. |
-| **Slack `not_in_channel` o `invalid_auth`** | El bot no está en el canal o el token es incorrecto. | Invita al bot al canal o pide de nuevo el token a Jeisembert y vuelve a correr `INSTALAR.bat` (solo pedirá ese dato). |
+| **Slack `not_in_channel` o `invalid_auth`** | El bot no está en el canal o el token es incorrecto. | Invita al bot al canal o corrige `SLACK_BOT_TOKEN` en el `.env`. |
 | **IA `401` / `429` / `404`** | Clave inválida / límite de uso / modelo inexistente. | `401`: corrige la clave en `.env`. `429`: espera o usa la otra IA. `404`: revisa `GROQ_MODEL` o `GEMINI_MODEL`. |
 | **`ACTUALIZAR.bat` se detiene por cambios locales** | Editaste archivos del repositorio. | Descártalos (`git checkout -- .`) o guárdalos aparte y vuelve a correrlo. |
 | **`Variables críticas faltantes en el .env`** | Falta alguna de las 5 variables obligatorias o ambas claves de IA. | Verifica en `.env` que estén definidas `DRIVE_SHEETS_ID`, `DRIVE_RESPONSES_FOLDER`, `GMAIL_LABEL_ID`, `GMAIL_REPLY_TO`, `SLACK_REVIEW_CHANNEL_ID` y al menos `GROQ_API_KEY` o `GEMINI_API_KEY`. |

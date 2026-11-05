@@ -75,18 +75,17 @@ if errorlevel 1 (
 )
 echo [OK]    Chromium de Playwright
 
-rem --- 5. Configuracion: .env, Google, etiquetas, Drive, Lupe y diagnostico ---
-"%VPY%" -m instalador.instalar
-if errorlevel 1 goto fallo
-
-rem --- 6. Accesos directos y servicio ---
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0deploy\instalar_gestor_correos.ps1" -Silencioso
-if errorlevel 1 (
-    echo [FALTA] No se pudieron crear los accesos directos ni arrancar el servicio. Revisa el error de arriba.
-    goto fallo
-)
 echo.
-echo [OK]    Proyecto E instalado. Abre el icono "Gestor de Correos" del Escritorio.
+echo [OK]    Entorno listo (.venv, requirements y Chromium).
+echo.
+echo  Siguiente ^(a mano^):
+echo    1. Copia .env.example a .env y completa Slack, GMAIL_REPLY_TO y claves de IA.
+echo    2. Pon credentials.json en data-json\
+echo    3. .venv\Scripts\python.exe scripts\lector_etiquetas.py
+echo    4. Crea en Drive legal-ops, hojas y plantillas; pon sus IDs en .env
+echo    5. .venv\Scripts\python.exe main.py login
+echo    6. Con el .env listo: deploy\INSTALAR_GESTOR_CORREOS.bat
+echo.
 pause
 exit /b 0
 
