@@ -7,6 +7,7 @@ BASE_DIR = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Pat
 load_dotenv(BASE_DIR / ".env")
 from email.utils import parseaddr
 from googleapiclient.discovery import build
+from app.alertas import alertar
 from autenticar import autenticar
 from agentes.agente_extractor_rt import AgenteExtractorRT
 from consultar_lupe import consultar_lupe
@@ -26,8 +27,8 @@ from entes.correo import _fecha_peticion
 from gmail_cuerpo import extraer_contenido, mensaje_tiene_pdf_o_word
 from flow_control import DetenerFlujo, comprobar_detener
 from lupe_navegador import SesionLupe, salir_por_lupe
-from utils.exceptions import LupeOcupado, LupeSesionRequerida
-from utils.logger import log_caso, obtener_log, resumen
+from utils.exceptions import LupeOcupado, LupeSesionRequerida, es_infraestructura
+from utils.logger import log_caso, obtener_log, resumen, resumir_error
 import logging
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
@@ -185,6 +186,7 @@ def _procesar_cola(lupe):
         "revision_manual": 0,
         "errores": 0,
         "duplicados": 0,
+        "pausa_ia": 0,
     }
     duplicados_vistos = {}
     if not mensajes:
@@ -267,6 +269,21 @@ def _procesar_cola(lupe):
         try:
             resultado_ia = extractor.extraer(asunto, texto_extraer)
         except Exception as error:
+            if es_infraestructura(error):
+                contadores["procesados"] -= 1
+                contadores["pausa_ia"] = len(mensajes) - contadores["procesados"]
+                detalle = resumir_error(error)
+                log_caso(log, correo_peticionario or remitente_email).warning(
+                    "Paso RT en pausa por la IA; %d correo(s) siguen sin leer: %s",
+                    contadores["pausa_ia"],
+                    detalle,
+                )
+                alertar(
+                    "rt_infra",
+                    "Paso RT pausado por la IA",
+                    f"{detalle}. Los correos se reintentarán en la siguiente ronda.",
+                )
+                break
             errores += 1
             log_caso(log, correo_peticionario or remitente_email).error(
                 "IA no disponible para extraer el caso; el correo sigue sin leer para la siguiente ronda: %s", error

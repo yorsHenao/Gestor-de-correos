@@ -18,8 +18,24 @@ RUTA_LOG = Path(__file__).resolve().parent.parent / "logs" / "proyecto_e.log"
 FORMATO_FECHA = "%Y-%m-%d %H:%M:%S"
 
 log = logging.getLogger("proyecto_e")
-_REINTENTO = re.compile(r"(?:retry(?:Delay| in)?|reintentar en)[^\d]*(\d+(?:\.\d+)?)\s*(ms|s)?", re.I)
+_REINTENTO = re.compile(
+    r"(?:try again in|retry(?:Delay| in)?|reintentar en)[^\d]*"
+    r"(?:(\d+)h)?(?:(\d+)m(?!s))?(?:(\d+(?:\.\d+)?)\s*(ms|s)?)?",
+    re.I,
+)
 _SEPARADOR = "-" * 60
+
+
+def segundos_reintento(texto):
+    """Segundos que pide esperar un 429 («7m12.5s», «450ms», «33s»). None si no lo dice."""
+    hallado = _REINTENTO.search(str(texto or ""))
+    if not hallado or not any(hallado.groups()):
+        return None
+    horas, minutos, valor, unidad = hallado.groups()
+    segundos = int(horas or 0) * 3600 + int(minutos or 0) * 60
+    if valor:
+        segundos += float(valor) / (1000 if (unidad or "s").lower() == "ms" else 1)
+    return segundos
 
 
 def resumir_error(error):
@@ -27,13 +43,8 @@ def resumir_error(error):
     texto = " ".join(str(error or "").split())
     bajo = texto.lower()
     if "429" in texto or "resource_exhausted" in bajo or "rate_limit" in bajo:
-        hallado = _REINTENTO.search(texto)
-        espera = ""
-        if hallado:
-            valor = float(hallado.group(1))
-            if (hallado.group(2) or "s").lower() == "ms":
-                valor /= 1000
-            espera = f", reintentar en {valor:g} s"
+        segundos = segundos_reintento(texto)
+        espera = f", reintentar en {segundos:g} s" if segundos is not None else ""
         return f"Cuota de IA agotada (429){espera}"
     if "503" in texto or "unavailable" in bajo:
         return "IA no disponible (alta demanda, 503)"

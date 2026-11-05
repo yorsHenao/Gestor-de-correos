@@ -2,6 +2,7 @@ import base64
 import logging
 import sys
 from datetime import datetime
+from email.mime.text import MIMEText
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -21,6 +22,7 @@ TIPOS = {
     "entes_revision": "Caso de Entes a revisión manual",
     "entes_pausa": "Entes pausado en esta ronda",
     "entes_infra": "Entes pausado por infraestructura",
+    "rt_infra": "Paso RT pausado por la IA",
     "servicio": "Servicio Proyecto E",
 }
 

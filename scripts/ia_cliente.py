@@ -1,5 +1,4 @@
 import json
-import re
 import time
 
 from google import genai
@@ -7,7 +6,7 @@ from google.genai import types
 from groq import Groq
 
 from config import GEMINI_API_KEY, GEMINI_MODEL, GROQ_API_KEY, GROQ_API_KEY2, GROQ_MODEL, IA_PROVIDER
-from utils.logger import obtener_log
+from utils.logger import obtener_log, segundos_reintento
 
 log = obtener_log()
 
@@ -16,7 +15,6 @@ _GEMINI_MODEL = GEMINI_MODEL
 _GROQ_MODEL = GROQ_MODEL
 _ESPERAS_LIMITE = (1, 2, 4)
 _TOPE_ESPERA = 20
-_REINTENTO = re.compile(r"try again in\s+([\d.]+)\s*(ms|s)?", re.IGNORECASE)
 _cliente_gemini = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 _cliente_groq = Groq(api_key=GROQ_API_KEY2 or GROQ_API_KEY) if (GROQ_API_KEY2 or GROQ_API_KEY) else None
 
@@ -69,13 +67,10 @@ def _codigo_limite(error):
 
 
 def _espera_limite(error, intento):
-    hallado = _REINTENTO.search(str(error))
-    if hallado:
-        valor = float(hallado.group(1))
-        segundos = valor / 1000 if (hallado.group(2) or "ms").lower() == "ms" else valor
-    else:
-        segundos = _ESPERAS_LIMITE[min(intento, len(_ESPERAS_LIMITE) - 1)]
-    return min(segundos, _TOPE_ESPERA)
+    segundos = segundos_reintento(error)
+    if segundos is None:
+        return _ESPERAS_LIMITE[min(intento, len(_ESPERAS_LIMITE) - 1)]
+    return segundos
 
 
 def llamar_json(prompt, system, operacion="IA", anunciar=True):
@@ -97,6 +92,9 @@ def llamar_json(prompt, system, operacion="IA", anunciar=True):
                     errores.append(f"{proveedor}: {error}")
                     break
                 espera = _espera_limite(error, intento)
+                if espera > _TOPE_ESPERA:
+                    errores.append(f"{proveedor}: {error}")
+                    break
                 log.info("IA %s limitada; reintento en %.1f s", proveedor.title(), espera)
                 time.sleep(espera)
         if indice < len(proveedores) - 1 and errores:
@@ -128,5 +126,7 @@ def llamar_gemini_vision(contenido, instruccion, mime_type="application/pdf"):
             if not _codigo_limite(error) or intento:
                 raise
             espera = _espera_limite(error, intento)
+            if espera > _TOPE_ESPERA:
+                raise
             log.info("IA Gemini Vision limitada; reintento en %.1f s", espera)
             time.sleep(espera)

@@ -6,10 +6,10 @@ El correo se imprime a PDF tal como llegó; no se redacta otro documento.
 
 import html
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from config import ENTES_TIMEOUT_FORM, URL_FORMULARIO
+from config import BASE_DIR, ENTES_TIMEOUT_FORM, URL_FORMULARIO
 
 MAX_ARCHIVOS = 10
 MAX_BYTES = 50 * 1024 * 1024
@@ -20,6 +20,9 @@ CLASE_ACTO = "form_entes.derecho_de_peticion"
 MEDIO_DEVOLUCION = "Reversion/Reembolso"
 LLAMAR_CLIENTE = "Si"
 TEXTO_OK = "Registro creado exitosamente"
+# Los asteriscos de las etiquetas son solo text-red-500; los errores de campo llevan text-xs.
+ERRORES_CAMPO = "span.text-red-500.text-xs"
+CAPTURAS = BASE_DIR / "logs" / "entes_formulario"
 
 ENVIO_OK = "ok"
 ENVIO_FALLO = "fallo"
@@ -159,8 +162,8 @@ def enviar_formulario(playwright, campos, timeout_seg=None):
     """Abre el formulario, lo llena y pulsa Submit. Cierra el navegador siempre.
 
     - ok: apareció «Registro creado exitosamente».
-    - fallo: no se llegó a pulsar Submit, o el formulario mostró otro mensaje.
-      Se puede reintentar sin riesgo de duplicar.
+    - fallo: no se llegó a pulsar Submit, el formulario rechazó un campo o mostró otro
+      mensaje. Se puede reintentar sin riesgo de duplicar.
     - incierto: se pulsó Submit y no hubo respuesta en `timeout_seg`.
       No se reintenta, para no enviar dos veces.
     """
@@ -200,11 +203,46 @@ def _esperar_confirmacion(page, ya_vistos, timeout_seg):
             if TEXTO_OK in texto:
                 return {"estado": ENVIO_OK, "detalle": texto}
             return {"estado": ENVIO_FALLO, "detalle": f"El formulario respondió: {texto[:300]}"}
+        errores = _errores_campo(page)
+        if errores:
+            return {
+                "estado": ENVIO_FALLO,
+                "detalle": f"El formulario rechazó campos: {'; '.join(errores)[:300]}",
+            }
         page.wait_for_timeout(500)
     return {
         "estado": ENVIO_INCIERTO,
-        "detalle": f"Sin confirmación {timeout_seg} s después de pulsar Submit",
+        "detalle": f"Sin confirmación {timeout_seg} s después de pulsar Submit; "
+        f"{_estado_boton(page)}{_captura(page)}",
     }
+
+
+def _errores_campo(page):
+    """Errores de validación bajo cada campo. Con ellos el formulario no envía nada."""
+    try:
+        textos = page.locator(ERRORES_CAMPO).all_inner_texts()
+    except Exception:
+        return []
+    return [" ".join(texto.split()) for texto in textos if texto.strip()]
+
+
+def _estado_boton(page):
+    try:
+        if page.get_by_role("button", name="Submit").is_disabled():
+            return "el formulario seguía enviando"
+        return "el formulario terminó sin mensaje"
+    except Exception:
+        return "no se pudo leer el formulario"
+
+
+def _captura(page):
+    try:
+        CAPTURAS.mkdir(parents=True, exist_ok=True)
+        ruta = CAPTURAS / f"incierto_{datetime.now():%Y%m%d_%H%M%S}.png"
+        page.screenshot(path=str(ruta), full_page=True)
+        return f" (captura: {ruta})"
+    except Exception:
+        return ""
 
 
 def _mensajes(page):
