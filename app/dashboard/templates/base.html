@@ -3,167 +3,61 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  {% block refresco %}{% endblock %}
   <title>Gestor de correos · {% block titulo %}Inicio{% endblock %}</title>
   <style>
-    :root {
-      --fondo: #f3f4f6;
-      --tarjeta: #fff;
-      --borde: #e6e8ec;
-      --texto: #1c1c1c;
-      --suave: #8a8f98;
-      --naranja: #ef4e23;
-      --durazno: #fde8e3;
-      --durazno-borde: #f3cfc6;
-      --ok: #3d8b66;
-      --aviso: #b86a2a;
-      --error: #b55248;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
-      background: var(--fondo);
-      color: var(--texto);
-    }
-    header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      background: var(--tarjeta);
-      color: var(--texto);
-      padding: 14px 28px;
-      border-bottom: 1px solid var(--borde);
-    }
-    header strong { font-size: 16px; font-weight: 600; color: var(--naranja); letter-spacing: -0.01em; }
-    header nav { display: flex; gap: 18px; }
-    header nav a { color: var(--suave); font-weight: 600; text-decoration: none; }
-    header nav a.activa { color: var(--naranja); }
-    main { max-width: 920px; margin: 0 auto; padding: 28px 24px 56px; }
-    .tarjetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 16px; }
-    .tarjeta {
-      background: var(--tarjeta);
-      border: 1px solid var(--borde);
-      border-radius: 12px;
-      padding: 18px 20px;
-      box-shadow: 0 1px 2px rgba(28, 28, 28, 0.04);
-    }
-    .tarjeta h3 {
-      margin: 0 0 8px;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      color: var(--suave);
-    }
-    .tarjeta .valor { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
-    h2 {
-      margin: 28px 0 12px;
-      font-size: 15px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .estado { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-    .ok { background: #e5f4ec; color: var(--ok); }
-    .aviso { background: #fff1e4; color: var(--aviso); }
-    .error { background: #fdecea; color: var(--error); }
-    .omitido { background: #eef0f3; color: var(--suave); }
-    .error-suave { color: var(--error); margin: 0 0 12px; }
-    .banner, .pausa {
-      border-radius: 12px;
-      padding: 12px 16px;
-      margin-bottom: 16px;
-    }
-    .banner { background: var(--durazno); border: 1px solid var(--durazno-borde); }
-    .pausa { background: #fff6ef; border: 1px solid #f3ddc8; }
-    .banner ul { margin: 6px 0 0; padding-left: 18px; }
-    .banner li { margin: 2px 0; }
-    form.inline { display: inline; }
-    button {
-      font: inherit;
-      height: 36px;
-      padding: 0 14px;
-      border-radius: 8px;
-      border: 1px solid #d9dde3;
-      background: #fff;
-      color: var(--texto);
-      cursor: pointer;
-    }
-    button.principal { background: var(--naranja); color: #fff; border-color: var(--naranja); font-weight: 600; }
-    button.secundario { background: #fff; color: var(--texto); }
-    button.activo { background: var(--durazno); border-color: var(--durazno-borde); color: var(--texto); font-weight: 600; }
-    button:disabled { opacity: .45; cursor: default; }
-    button.activo:disabled { opacity: 1; }
-    button.corriendo,
-    button.corriendo:disabled {
-      background: var(--naranja);
-      color: #fff;
-      border-color: var(--naranja);
-      opacity: 1;
-      font-weight: 600;
-    }
-    button:hover:not(:disabled) { filter: brightness(.97); }
-    button:focus-visible { outline: 2px solid #f5b9a4; outline-offset: 2px; }
-    .suave { color: var(--suave); }
-    a { color: var(--naranja); }
-    .meta-vista { font-size: 13px; color: var(--suave); margin: 0 0 16px; }
-    .fila-botones, .fila-modos, .pasos-sueltos { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-    .fila-modos { margin-top: 16px; gap: 18px 28px; }
-    .modo { display: flex; align-items: center; gap: 10px; }
-    .etiqueta {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: .06em;
-      text-transform: uppercase;
-      color: var(--suave);
-    }
-    .segmento { display: inline-flex; }
-    .segmento form { display: flex; }
-    .segmento button { border-radius: 0; }
-    .segmento form:first-child button { border-radius: 8px 0 0 8px; }
-    .segmento form:last-child button { border-radius: 0 8px 8px 0; margin-left: -1px; }
-    .pasos-sueltos { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--borde); }
-    .nota { margin: 10px 0 0; font-size: 13px; }
-    .conteo-estado { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
-    .conteo-estado.destacado { font-weight: 600; }
-    pre.registro {
-      margin: 0;
-      max-height: 70vh;
-      overflow: auto;
-      white-space: pre-wrap;
-      word-break: break-word;
-      font: 12px/1.5 Consolas, "Cascadia Mono", ui-monospace, monospace;
-    }
-    @media (max-width: 720px) {
-      header { padding: 14px 16px; }
-      main { padding: 20px 16px 40px; }
-    }
+    :root{--or:#E8620C;--or2:#C9520A;--ink:#1D2129;--mut:#5B6270;--line:#DDE1E6;--bg:#F4F5F7}
+    *{box-sizing:border-box}body{margin:0;font-family:"Segoe UI",system-ui,sans-serif;color:var(--ink);background:var(--bg);font-size:14px}
+    .btn{white-space:nowrap;font:inherit;font-size:14px;font-weight:600;padding:9px 18px;border-radius:4px;border:1px solid #C3C8D0;background:#fff;color:var(--ink);cursor:pointer}
+    .btn:focus-visible{outline:2px solid var(--or);outline-offset:2px}
+    .btn.pri{background:var(--or);border-color:var(--or);color:#fff}.btn.pri:hover{background:var(--or2)}
+    .btn[disabled]{opacity:.45;cursor:not-allowed}
+    .pill{display:inline-block;font-size:12px;font-weight:600;padding:3px 10px;border-radius:4px}
+    .p-or{background:#FDEBDD;color:#A9450A}.p-ok{background:#E5F4EC;color:#1E7B46}.p-er{background:#FDECEA;color:#B42318}
+    .lbl{font-size:12px;color:var(--mut)}
+    .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .box{background:#fff;border:1px solid var(--line);border-radius:6px}
+    .strip{display:flex;align-items:center;gap:14px;padding:14px 18px;border:1px solid #F3C9A8;background:#FFF8F2;border-radius:6px}
+    .app{max-width:1180px;margin:0 auto;padding:0 40px}
+    .hdr{background:#fff;border-bottom:1px solid var(--line)}.hdr .app{display:flex;align-items:center;height:60px;gap:28px}
+    .hdr nav a{color:var(--mut);text-decoration:none;padding:20px 0;margin-right:22px}.hdr nav a.on{color:var(--ink);font-weight:600;border-bottom:2px solid var(--or)}
+    h2{font-size:15px;margin:0 0 14px;font-weight:600}
+    select{font:inherit;font-size:14px;padding:7px 10px;border:1px solid #C3C8D0;border-radius:4px;background:#fff}
+    table{width:100%;border-collapse:collapse}td{padding:8px 0;border-bottom:1px solid #EEF0F2}td.n{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+    .ev{display:grid;grid-template-columns:70px 100px 1fr auto;gap:16px;align-items:center;padding:14px 20px;border-bottom:1px solid #EEF0F2;cursor:pointer}
+    .ev:hover{background:#FAFAFB}.ev .t{color:var(--mut);font-variant-numeric:tabular-nums}.ev .s{font-weight:600}
+    .lnk{font:inherit;font-size:13px;color:var(--mut);background:none;border:0;cursor:pointer;text-decoration:underline}
+    .ok{color:#1E7B46;font-weight:600}.er{color:#B42318;font-weight:600}.ac{background:#FFF8F2}
+    .det{display:none;padding:0 20px 16px 226px;border-bottom:1px solid #EEF0F2}.det.on{display:block}
+    .det pre{margin:6px 0 0;padding:10px 12px;background:#F4F5F7;border:1px solid var(--line);border-radius:4px;font:12px Consolas,"Cascadia Mono",monospace;white-space:pre-wrap}
+    .seg{display:inline-flex;border:1px solid #C3C8D0;border-radius:4px;overflow:hidden}.seg a,.seg button{font:inherit;font-size:13px;border:0;background:#fff;padding:7px 14px;cursor:pointer;color:var(--ink);text-decoration:none}
+    .seg a.on,.seg button.on{background:#2A2F38;color:#fff}
+    .sg{display:inline-flex;background:#ECEEF1;border-radius:6px;padding:3px;gap:2px}
+    .sg form{display:inline}.sg button{font:inherit;font-size:13px;font-weight:600;border:0;background:none;color:var(--mut);padding:6px 14px;border-radius:4px;cursor:pointer;white-space:nowrap}
+    .sg button.on{background:#FDEBDD;color:#A9450A}.sg button:disabled.on{opacity:1;cursor:default}.sg button:focus-visible{outline:2px solid var(--or)}
+    .ct td{padding:10px 0;font-size:14px}.ct td.n{font-weight:600}
+    .banner{background:#FFF8F2;border:1px solid #F3C9A8;border-radius:6px;padding:12px 16px;margin:0 0 16px}
+    .banner ul{margin:6px 0 0;padding-left:18px}
+    form.inline{display:inline}
+    @media(max-width:1100px){.cols{grid-template-columns:1fr!important}.app{padding:0 18px}}
   </style>
 </head>
 <body>
-<header>
-  <strong>Gestor de correos</strong>
-  <nav>
-    <a href="/" class="{% if pagina_activa == 'inicio' %}activa{% endif %}">Inicio</a>
-    <a href="/registro" class="{% if pagina_activa == 'registro' %}activa{% endif %}">Registro</a>
-  </nav>
-</header>
-<main>
-  {% if alertas %}
-  <div class="banner">
-    <strong>Avisos</strong>
-    <ul>
-      {% for a in alertas %}<li><span class="suave">{{ a.fecha }}</span> · <strong>{{ a.titulo }}</strong>{% if a.detalle %} — {{ a.detalle[:300] }}{% endif %}</li>{% endfor %}
-    </ul>
+<header class="hdr"><div class="app">
+  <div class="row">
+    <svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="12" width="44" height="32" rx="4" fill="#E8620C"/><path d="M6 15l20 15 20-15" stroke="#fff" stroke-width="3.5" fill="none"/><circle cx="48" cy="44" r="13" fill="#2A2F38" stroke="#fff" stroke-width="2.5"/><path d="M42 40h9m-3-3l3 3-3 3M54 48h-9m3-3l-3 3 3 3" stroke="#fff" stroke-width="2.2" fill="none"/></svg>
+    <b style="font-size:18px;font-weight:600">Gestor de correos</b>
   </div>
-  {% endif %}
-  {% if pausado %}
-  <div class="pausa">El servicio está en pausa. No se lanzan ciclos programados.</div>
+  <nav>
+    <a href="/" class="{% if pagina_activa == 'inicio' %}on{% endif %}">Inicio</a>
+    <a href="/actividad" class="{% if pagina_activa == 'actividad' %}on{% endif %}">Actividad</a>
+  </nav>
+</div></header>
+<main class="app" style="padding-top:28px;padding-bottom:48px">
+  {% if alertas %}
+  <div class="banner"><strong>Avisos</strong><ul>{% for a in alertas %}<li><span class="lbl">{{ a.fecha }}</span> · <strong>{{ a.titulo }}</strong>{% if a.detalle %} — {{ a.detalle[:220] }}{% endif %}</li>{% endfor %}</ul></div>
   {% endif %}
   {% block contenido %}{% endblock %}
 </main>
+{% block scripts %}{% endblock %}
 </body>
 </html>

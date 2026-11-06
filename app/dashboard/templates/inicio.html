@@ -1,112 +1,200 @@
 {% extends "base.html" %}
-{% block refresco %}{% if refresco_seg %}<meta http-equiv="refresh" content="{{ refresco_seg }}">{% endif %}{% endblock %}
+{% block titulo %}Inicio{% endblock %}
 {% block contenido %}
-{% if en_curso %}<p class="meta-vista">Se actualiza solo.</p>{% endif %}
-<div class="tarjetas">
-  <div class="tarjeta">
-    <h3>Próximo ciclo</h3>
-    <div class="valor">{% if proximo %}{{ proximo.strftime("%d/%m %H:%M") }}{% else %}—{% endif %}</div>
-    <div class="suave">Cada {{ "%g"|format(ciclo_horas) }} h</div>
-  </div>
-  <div class="tarjeta">
-    <h3>Ahora</h3>
-    <div class="valor">
-      {% if esperando %}Esperando confirmación
-      {% elif etiqueta_paso %}{{ etiqueta_paso }}
-      {% else %}—{% endif %}
-    </div>
-  </div>
-  <div class="tarjeta">
-    <h3>Sesión de Lupe</h3>
-    <div class="valor">
-      {% if estado_lupe == "vigente" %}<span class="estado ok">Vigente</span>
-      {% elif estado_lupe == "requiere_login" %}<span class="estado error">Pide login</span>
-      {% elif estado_lupe == "sin_perfil" %}<span class="estado aviso">Sin perfil</span>
-      {% else %}<span class="estado omitido">{{ estado_lupe }}</span>{% endif %}
-    </div>
-    {% set lupe_caida = estado_lupe in ("requiere_login", "sin_perfil") or login_lupe.estado == "error" %}
-    <div class="fila-botones" style="margin-top: 10px;">
-      <form class="inline" method="post" action="/acciones/login-lupe">
-        <button type="submit" class="{% if lupe_caida %}activo{% else %}secundario{% endif %}" {% if login_abierto %}disabled{% endif %}>Iniciar sesión</button>
-      </form>
-      {% if login_abierto %}<span class="estado omitido">Abriendo…</span>
-      {% elif login_lupe.estado == "ok" %}<span class="estado ok">Sesión iniciada</span>
-      {% elif login_lupe.estado == "ocupado" %}<span class="estado aviso">Lupe en uso</span>
-      {% elif login_lupe.estado == "error" %}<span class="estado error">No se completó</span>{% endif %}
-    </div>
-  </div>
-</div>
-
-<div class="tarjeta">
-  <div class="fila-botones">
-    <form class="inline" method="post" action="/acciones/ciclo">
-      <button type="submit" class="principal" {% if en_curso %}disabled{% endif %}>Ejecutar ciclo</button>
-    </form>
+<div id="barra-estado" class="box row" style="padding:14px 18px;justify-content:space-between;margin-bottom:12px">
+  <div class="row">
     {% if pausado %}
-      <form class="inline" method="post" action="/acciones/reanudar"><button type="submit">Reanudar</button></form>
+      <span class="pill p-or" id="pill-auto">Pausa</span>
+      <b id="txt-auto">Ciclos automáticos en pausa</b>
     {% else %}
-      <form class="inline" method="post" action="/acciones/pausar"><button type="submit">Pausar</button></form>
+      <span class="pill p-ok" id="pill-auto">Activo</span>
+      <b id="txt-auto">Automatización en marcha</b>
     {% endif %}
-    {% if en_curso %}
-      <form class="inline" method="post" action="/acciones/detener"><button type="submit">Detener paso</button></form>
-    {% endif %}
-    {% if esperando %}
-      <form class="inline" method="post" action="/acciones/continuar"><button type="submit" class="principal">Continuar</button></form>
-    {% endif %}
+    <span class="lbl" id="txt-proximo">Cada {{ "%g"|format(ciclo_horas) }} h{% if proximo_txt %} · Próximo {{ proximo_txt }}{% endif %}</span>
   </div>
-
-  <div class="fila-modos">
-    <div class="modo">
-      <span class="etiqueta">Envío</span>
-      <div class="segmento">
-        <form method="post" action="/acciones/calidad/borrador">
-          <button type="submit" class="{% if borrador %}activo{% endif %}" {% if borrador or calidad_bloqueada %}disabled{% endif %}>Borrador</button>
-        </form>
-        <form method="post" action="/acciones/calidad/enviar">
-          <button type="submit" class="{% if not borrador %}activo{% endif %}" {% if not borrador or calidad_bloqueada %}disabled{% endif %}>Enviar</button>
-        </form>
-      </div>
-    </div>
-    <div class="modo">
-      <span class="etiqueta">Tras clasificar</span>
-      <div class="segmento">
-        <form method="post" action="/acciones/revision/continuo">
-          <button type="submit" class="{% if not confirmar %}activo{% endif %}" {% if not confirmar %}disabled{% endif %}>Continuo</button>
-        </form>
-        <form method="post" action="/acciones/revision/confirmar">
-          <button type="submit" class="{% if confirmar %}activo{% endif %}" {% if confirmar %}disabled{% endif %}>Confirmar</button>
-        </form>
-      </div>
-    </div>
-  </div>
-  {% if deteniendo %}<p class="nota">El paso termina el caso actual y se detiene.</p>{% endif %}
-  {% if esperando %}<p class="nota">Clasificación lista. Revisa las etiquetas y continúa.</p>{% endif %}
-  {% if calidad_bloqueada %}<p class="nota suave">El envío se cambia en pausa.</p>{% endif %}
-
-  <div class="pasos-sueltos">
-    <span class="etiqueta">Pasos</span>
-    {% for nombre, etiqueta in pasos %}
-      <form class="inline" method="post" action="/acciones/paso/{{ nombre }}">
-        <button type="submit" class="secundario{% if nombre == paso_en_curso %} corriendo{% endif %}" {% if en_curso %}disabled{% endif %}>{{ etiqueta }}</button>
-      </form>
-    {% endfor %}
+  <div id="acciones-auto">
+  {% if pausado %}
+    <form class="inline" method="post" action="/acciones/reanudar"><button class="btn pri" type="submit">Reanudar ciclos</button></form>
+  {% else %}
+    <form class="inline" method="post" action="/acciones/pausar"><button class="btn" type="submit">Pausar ciclos</button></form>
+  {% endif %}
   </div>
 </div>
 
-<h2>Casos
-  <form class="inline" method="post" action="/acciones/refrescar-sheet"><button type="submit" class="secundario">Actualizar</button></form>
-</h2>
-{% if casos.error %}<p class="error-suave">No se pudieron leer los conteos.</p>{% endif %}
-<div class="tarjetas">
-  <div class="tarjeta"><h3>RT</h3>
-    {% for estado, n in casos.rt_lista %}
-      <div class="conteo-estado{% if estado in ('En Slack - pendiente', 'Nuevo', 'Caso manual') %} destacado{% endif %}"><span>{{ estado }}</span><strong>{{ n }}</strong></div>
-    {% else %}<div class="suave">—</div>{% endfor %}
+<div id="strip-trabajo" class="strip" style="margin-bottom:24px;{% if not en_curso %}display:none{% endif %}">
+  <span class="pill p-or" id="pill-trabajo">{% if deteniendo %}Finalizando{% elif esperando %}Revisión{% else %}En curso{% endif %}</span>
+  <div>
+    <b id="txt-trabajo">{% if esperando %}Clasificar · Esperando confirmación{% elif etiqueta_paso %}{{ etiqueta_paso }}{% if deteniendo %} · Terminando el caso actual{% endif %}{% else %}Ciclo en curso{% endif %}</b>
+    <div class="lbl" style="margin-top:2px" id="txt-trabajo-help">{% if deteniendo %}Podrás ejecutar otro paso al finalizar.{% elif esperando %}Revisa las etiquetas y continúa.{% else %}Hay un proceso activo.{% endif %}</div>
   </div>
-  <div class="tarjeta"><h3>Entes</h3>
-    {% for estado, n in casos.entes_lista %}
-      <div class="conteo-estado{% if 'Error' in estado or estado == 'revisión manual' %} destacado{% endif %}"><span>{{ estado }}</span><strong>{{ n }}</strong></div>
-    {% else %}<div class="suave">—</div>{% endfor %}
+  <span style="flex:1"></span>
+  <span id="acciones-trabajo">
+  {% if esperando %}
+    <form class="inline" method="post" action="/acciones/continuar"><button class="btn pri" type="submit">Continuar</button></form>
+  {% endif %}
+  {% if en_curso and not esperando %}
+    <form class="inline" method="post" action="/acciones/detener"><button class="btn" type="submit"{% if deteniendo %} disabled{% endif %}>Detener paso</button></form>
+  {% endif %}
+  </span>
+</div>
+
+<div id="strip-lupe" class="{% if lupe_vigente %}box row{% else %}strip{% endif %}" style="padding:14px 18px;margin-bottom:24px">
+  <span class="pill {% if lupe_vigente %}p-ok{% else %}p-er{% endif %}" id="pill-lupe">Lupe</span>
+  <div>
+    <b id="txt-lupe">{{ lupe_titulo }}</b>
+    <div class="lbl" style="margin-top:2px" id="txt-lupe-help">{{ lupe_ayuda }}</div>
+  </div>
+  <span style="flex:1"></span>
+  <form class="inline" id="form-lupe" method="post" action="/acciones/login-lupe" style="{% if lupe_vigente %}display:none{% endif %}"><button class="btn pri" type="submit" id="btn-lupe" {% if login_abierto %}disabled{% endif %}>Iniciar sesión</button></form>
+</div>
+
+<div class="cols" style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+  <div class="box" style="padding:20px 22px">
+    <h2>Ejecutar ahora</h2>
+    <div class="row" id="botones-ejecutar">
+      <form class="inline" method="post" action="/acciones/ciclo"><button class="btn pri" type="submit" {% if en_curso %}disabled{% endif %}>Ciclo completo</button></form>
+      {% for nombre, etiqueta in pasos %}
+      <form class="inline" method="post" action="/acciones/paso/{{ nombre }}"><button class="btn" type="submit" {% if en_curso %}disabled{% endif %}>{{ etiqueta }}</button></form>
+      {% endfor %}
+    </div>
+    <div class="lbl" style="margin-top:12px;{% if not (pausado and not en_curso) %}display:none{% endif %}" id="nota-manual">Las acciones manuales están disponibles con la automatización en pausa.</div>
+  </div>
+  <div class="box" style="padding:20px 22px;display:flex;flex-direction:column;gap:16px;justify-content:center">
+    <div class="row" style="justify-content:space-between">
+      <span style="font-weight:600">Envío</span>
+      <div class="sg" id="calidad-grupo">
+        <form method="post" action="/acciones/calidad/borrador"><button value="borrador" type="submit" class="{% if borrador %}on{% endif %}" {% if borrador or calidad_bloqueada %}disabled{% endif %}>Borrador</button></form>
+        <form method="post" action="/acciones/calidad/enviar"><button value="enviar" type="submit" class="{% if not borrador %}on{% endif %}" {% if not borrador or calidad_bloqueada %}disabled{% endif %}>Enviar</button></form>
+      </div>
+    </div>
+    <div class="row" style="justify-content:space-between;padding-top:16px;border-top:1px solid #EEF0F2">
+      <span style="font-weight:600">Después de clasificar</span>
+      <div class="sg" id="revision-grupo">
+        <form method="post" action="/acciones/revision/confirmar"><button value="revisar" type="submit" class="{% if confirmar %}on{% endif %}" {% if confirmar %}disabled{% endif %}>Revisar</button></form>
+        <form method="post" action="/acciones/revision/continuo"><button value="continuo" type="submit" class="{% if not confirmar %}on{% endif %}" {% if not confirmar %}disabled{% endif %}>Continuar automáticamente</button></form>
+      </div>
+    </div>
+    <div class="lbl" style="{% if not calidad_bloqueada %}display:none{% endif %}" id="nota-envio">El envío se cambia cuando no hay un proceso activo, o con la automatización en pausa.</div>
   </div>
 </div>
+
+<div class="box" style="margin-top:24px;padding:18px 24px" id="casos-box">
+  <div class="row" style="justify-content:space-between;margin-bottom:14px">
+    <h2 style="margin:0">Casos</h2>
+    <div class="row">
+      <span class="lbl" id="casos-actualizado">{% if casos.actualizado %}{{ casos.actualizado }}{% else %}Sin datos aún{% endif %}</span>
+      <form class="inline" method="post" action="/acciones/refrescar-sheet"><button class="btn" style="padding:6px 12px;font-size:13px" type="submit">Actualizar</button></form>
+    </div>
+  </div>
+  {% if casos.error %}<p class="lbl" style="color:#B42318">No se pudieron leer los conteos.</p>
+  {% elif casos.vacio %}<p class="lbl">No hay casos para mostrar.</p>
+  {% else %}
+  <div class="cols" style="display:grid;grid-template-columns:1fr 1fr;gap:48px">
+    <div>
+      <div style="font-size:14px;font-weight:600;padding-bottom:8px;border-bottom:1px solid var(--line)">RT</div>
+      <table class="ct">
+        {% for item in casos.rt_lista %}
+        <tr><td>{{ item.estado }}</td><td class="n">{{ item.n }}</td></tr>
+        {% else %}<tr><td class="lbl" colspan="2">—</td></tr>{% endfor %}
+      </table>
+    </div>
+    <div>
+      <div style="font-size:14px;font-weight:600;padding-bottom:8px;border-bottom:1px solid var(--line)">Entes</div>
+      <table class="ct">
+        {% for item in casos.entes_lista %}
+        <tr><td>{{ item.estado }}</td><td class="n">{{ item.n }}</td></tr>
+        {% else %}<tr><td class="lbl" colspan="2">—</td></tr>{% endfor %}
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  const cicloHoras = {{ "%g"|format(ciclo_horas) }};
+  function setDisplay(el, on){ if(el) el.style.display = on ? "" : "none"; }
+  function applyEstado(d){
+    const pausado = !!d.pausado;
+    const trabajo = d.trabajo || {};
+    const activo = !!trabajo.activo;
+    const pill = document.getElementById("pill-auto");
+    const txt = document.getElementById("txt-auto");
+    const prox = document.getElementById("txt-proximo");
+    const acciones = document.getElementById("acciones-auto");
+    if(pill){ pill.textContent = pausado ? "Pausa" : "Activo"; pill.className = "pill " + (pausado ? "p-or" : "p-ok"); }
+    if(txt) txt.textContent = pausado ? "Ciclos automáticos en pausa" : "Automatización en marcha";
+    if(prox){
+      let t = "Cada " + cicloHoras + " h";
+      if(d.proximo_txt) t += " · Próximo " + d.proximo_txt;
+      prox.textContent = t;
+    }
+    if(acciones){
+      acciones.innerHTML = pausado
+        ? '<form class="inline" method="post" action="/acciones/reanudar"><button class="btn pri" type="submit">Reanudar ciclos</button></form>'
+        : '<form class="inline" method="post" action="/acciones/pausar"><button class="btn" type="submit">Pausar ciclos</button></form>';
+    }
+    const strip = document.getElementById("strip-trabajo");
+    setDisplay(strip, activo);
+    if(activo){
+      const pillT = document.getElementById("pill-trabajo");
+      const txtT = document.getElementById("txt-trabajo");
+      const help = document.getElementById("txt-trabajo-help");
+      const acc = document.getElementById("acciones-trabajo");
+      if(pillT) pillT.textContent = trabajo.finalizando ? "Finalizando" : (trabajo.esperando ? "Revisión" : "En curso");
+      if(txtT){
+        if(trabajo.esperando) txtT.textContent = "Clasificar · Esperando confirmación";
+        else if(trabajo.etiqueta) txtT.textContent = trabajo.etiqueta + (trabajo.finalizando ? " · Terminando el caso actual" : "");
+        else txtT.textContent = "Ciclo en curso";
+      }
+      if(help){
+        help.textContent = trabajo.finalizando ? "Podrás ejecutar otro paso al finalizar." : (trabajo.esperando ? "Revisa las etiquetas y continúa." : "Hay un proceso activo.");
+      }
+      if(acc){
+        if(trabajo.esperando){
+          acc.innerHTML = '<form class="inline" method="post" action="/acciones/continuar"><button class="btn pri" type="submit">Continuar</button></form>';
+        } else {
+          acc.innerHTML = '<form class="inline" method="post" action="/acciones/detener"><button class="btn" type="submit"'+(trabajo.finalizando?' disabled':'')+'>Detener paso</button></form>';
+        }
+      }
+    }
+    document.querySelectorAll("#botones-ejecutar button").forEach(b => { b.disabled = activo; });
+    setDisplay(document.getElementById("nota-manual"), pausado && !activo);
+    setDisplay(document.getElementById("nota-envio"), !!d.calidad_bloqueada);
+    document.querySelectorAll("#calidad-grupo button").forEach(b => {
+      const borrador = b.value === "borrador";
+      b.classList.toggle("on", !!d.borrador === borrador);
+      b.disabled = !!d.calidad_bloqueada || (!!d.borrador === borrador);
+    });
+    document.querySelectorAll("#revision-grupo button").forEach(b => {
+      const revisar = b.value === "revisar";
+      b.classList.toggle("on", !!d.confirmar === revisar);
+      b.disabled = !!d.confirmar === revisar;
+    });
+    const lupe = document.getElementById("strip-lupe");
+    if(lupe){
+      const vigente = !!d.lupe_vigente;
+      lupe.className = vigente ? "box row" : "strip";
+      const pl = document.getElementById("pill-lupe");
+      if(pl) pl.className = "pill " + (vigente ? "p-ok" : "p-er");
+      const tl = document.getElementById("txt-lupe");
+      if(tl) tl.textContent = d.lupe_titulo || "";
+      const lh = document.getElementById("txt-lupe-help");
+      if(lh) lh.textContent = d.lupe_ayuda || "";
+      setDisplay(document.getElementById("form-lupe"), !vigente);
+      const btn = document.getElementById("btn-lupe");
+      if(btn) btn.disabled = !!d.login_abierto;
+    }
+  }
+  setInterval(async () => {
+    if(document.hidden) return;
+    try{
+      const r = await fetch("/estado", {cache:"no-store"});
+      if(!r.ok) return;
+      applyEstado(await r.json());
+    }catch(e){}
+  }, 5000);
+})();
+</script>
 {% endblock %}

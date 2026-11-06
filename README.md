@@ -583,7 +583,7 @@ Cuando el servicio está activo (`python main.py servicio`), el panel de control
   - **Continuo (`false`):** Ejecuta los 4 pasos de corrido sin intervención humana.
 - **Contadores de Google Sheets en vivo:** Muestra el conteo de casos por estado tanto de la hoja de **RT** como de la hoja de **Entes** (con caché de 5 minutos y botón de refresco inmediato).
 - **Estado de Lupe y Alertas:** Indica si la sesión de Lupe está `vigente`, `requiere_login` o `sin_perfil`, y lista las últimas alertas emitidas.
-- **Botón «Iniciar sesión en Lupe»:** Hace lo mismo que `python main.py login` sin abrir una terminal. Siempre está disponible y aparece destacado cuando la sesión está caída (`requiere_login` o `sin_perfil`). Abre Chromium con el perfil persistente **en el PC donde corre el servicio**, muestra el estado (*Abriendo navegador…*, *Sesión iniciada* o el error) y deja el resultado en el log (paso `login_lupe`). No se lanza dos veces a la vez, y si un ciclo o paso está usando Lupe avisa en lugar de chocar con el candado del perfil.
+- **Tarjeta «Lupe» y botón «Iniciar sesión»:** La tarjeta está siempre en el inicio. Con la sesión vigente dice **Sesión vigente**; si no, **Desconectado** con el botón **Iniciar sesión**, que hace lo mismo que `python main.py login` sin abrir una terminal. Abre Chromium con el perfil persistente **en el PC donde corre el servicio**, muestra el estado (*Abriendo navegador…*, *Sesión iniciada* o el error) y deja el resultado en el log (paso `login_lupe`). No se lanza dos veces a la vez, y si un ciclo o paso está usando Lupe avisa en lugar de chocar con el candado del perfil.
 - **Visor de Registro (`/registro`):** Muestra en tiempo real las últimas 200 líneas de `logs/proyecto_e.log` con auto-refresco cada 10 segundos mientras hay un ciclo en ejecución.
 
 ---
@@ -643,7 +643,7 @@ Se crea automáticamente en el primer arranque (no requiere migraciones manuales
 | :---: | :--- | :--- |
 | `0` | Ejecución exitosa | Marca el paso como `ok` (o `aviso` si el resumen reportó errores puntuales en algún caso). |
 | `3` | Servicio ya en ejecución | `python main.py servicio` sale inmediatamente si detecta otro servicio activo (`data/servicio.lock`). |
-| `20` | **Lupe requiere iniciar sesión** | Emite alerta `lupe_login` y omite los demás pasos que usan Lupe durante ese ciclo hasta ejecutar `python main.py login`. |
+| `20` | **Lupe requiere iniciar sesión** | Emite alerta `lupe_login` y omite los demás pasos que usan Lupe durante ese ciclo. Quedan en `logs/lupe_pendiente.json` y se reanudan solos (en menos de 30 s) cuando la sesión vuelve a estar vigente, con el botón del dashboard o con `python main.py login`. |
 | `21` | **Perfil de Lupe ocupado** | Registra aviso `lupe_ocupado` y reintenta el paso en el siguiente ciclo. |
 | `!= 0` | Error en el paso | Emite alerta `paso_error` con las últimas líneas de salida del proceso. |
 

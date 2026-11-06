@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block titulo %}Actividad{% endblock %}
+{% block contenido %}
+<div class="row" style="justify-content:space-between;margin-bottom:16px">
+  <h1 style="font-size:22px;font-weight:600;margin:0">Actividad</h1>
+  <div class="row">
+    <div class="seg">
+      <a href="/actividad?ambito=actual&paso={{ filtro_paso }}" class="{% if ambito == 'actual' %}on{% endif %}">Ciclo actual</a>
+      <a href="/actividad?ambito=anteriores&paso={{ filtro_paso }}" class="{% if ambito == 'anteriores' %}on{% endif %}">Anteriores</a>
+    </div>
+    <form method="get" action="/actividad" class="row" id="filtro-paso">
+      <input type="hidden" name="ambito" value="{{ ambito }}">
+      <select name="paso" onchange="this.form.submit()">
+        <option value="todos" {% if filtro_paso == 'todos' %}selected{% endif %}>Todos los pasos</option>
+        <option value="ciclo" {% if filtro_paso == 'ciclo' %}selected{% endif %}>Ciclo</option>
+        <option value="clasificar" {% if filtro_paso == 'clasificar' %}selected{% endif %}>Clasificar</option>
+        <option value="rt" {% if filtro_paso == 'rt' %}selected{% endif %}>RT</option>
+        <option value="slack" {% if filtro_paso == 'slack' %}selected{% endif %}>Slack</option>
+        <option value="entes" {% if filtro_paso == 'entes' %}selected{% endif %}>Entes</option>
+      </select>
+    </form>
+  </div>
+</div>
+<div class="box" id="lista-actividad" data-ambito="{{ ambito }}" data-paso="{{ filtro_paso }}">
+{% if not eventos %}
+  <div class="lbl vacio" style="padding:20px">No hay eventos estructurados para mostrar. Los nuevos ciclos quedarán registrados aquí.</div>
+{% else %}
+  {% for e in eventos %}
+  {% set hora = (e.ts[11:16] if e.ts and e.ts|length >= 16 else e.ts) %}
+  <div class="ev{% if e.estado in ('esperando','finalizando') or e.tipo == 'revision_espera' %} ac{% endif %}" data-id="{{ e.id }}">
+    <span class="t">{{ hora }}</span>
+    <span class="s">{% if e.paso == 'clasificar' %}Clasificar{% elif e.paso == 'rt' %}RT{% elif e.paso == 'slack' %}Slack{% elif e.paso == 'entes' %}Entes{% else %}Ciclo{% endif %}</span>
+    <span class="msg">{{ e.mensaje }}</span>
+    <span class="row">
+      {% if e.estado == 'error' %}<span class="er">Error</span>
+      {% elif e.estado == 'ok' %}<span class="ok">Listo</span>
+      {% elif e.estado == 'esperando' %}<span class="pill p-or">Revisión</span>{% endif %}
+      <button type="button" class="lnk btn-detalle">Ver detalle</button>
+    </span>
+  </div>
+  <div class="det" data-for="{{ e.id }}"><span class="lbl">Detalle técnico</span><pre>{{ e.detalle or e.ts }}</pre></div>
+  {% endfor %}
+{% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  const lista = document.getElementById("lista-actividad");
+  if(!lista) return;
+  const abiertos = new Set();
+  function etiquetaPaso(p){
+    return ({clasificar:"Clasificar",rt:"RT",slack:"Slack",entes:"Entes",ciclo:"Ciclo"}[p] || "Ciclo");
+  }
+  function horaDe(ts){
+    return (ts && ts.length >= 16) ? ts.slice(11,16) : (ts || "");
+  }
+  function bindRow(ev, det){
+    const toggle = (e) => {
+      if(e) e.stopPropagation();
+      if(!det) return;
+      det.classList.toggle("on");
+      const id = ev.getAttribute("data-id");
+      if(det.classList.contains("on")) abiertos.add(id); else abiertos.delete(id);
+    };
+    ev.onclick = toggle;
+    const btn = ev.querySelector(".btn-detalle");
+    if(btn) btn.onclick = toggle;
+  }
+  function bindAll(){
+    lista.querySelectorAll(".ev").forEach(ev => bindRow(ev, ev.nextElementSibling));
+  }
+  function filaEstado(estado){
+    if(estado === "error"){ const s=document.createElement("span"); s.className="er"; s.textContent="Error"; return s; }
+    if(estado === "ok"){ const s=document.createElement("span"); s.className="ok"; s.textContent="Listo"; return s; }
+    if(estado === "esperando"){ const s=document.createElement("span"); s.className="pill p-or"; s.textContent="Revisión"; return s; }
+    return null;
+  }
+  function render(eventos){
+    const y = window.scrollY;
+    lista.querySelectorAll(".det.on").forEach(d => abiertos.add(d.getAttribute("data-for")));
+    lista.textContent = "";
+    if(!eventos.length){
+      const vacio = document.createElement("div");
+      vacio.className = "lbl vacio";
+      vacio.style.padding = "20px";
+      vacio.textContent = "No hay eventos estructurados para mostrar. Los nuevos ciclos quedarán registrados aquí.";
+      lista.appendChild(vacio);
+      window.scrollTo(0, y);
+      return;
+    }
+    for(const e of eventos){
+      const ev = document.createElement("div");
+      const ac = (e.estado === "esperando" || e.estado === "finalizando" || e.tipo === "revision_espera");
+      ev.className = "ev" + (ac ? " ac" : "");
+      ev.setAttribute("data-id", e.id || "");
+      const t = document.createElement("span"); t.className="t"; t.textContent = horaDe(e.ts);
+      const s = document.createElement("span"); s.className="s"; s.textContent = etiquetaPaso(e.paso);
+      const msg = document.createElement("span"); msg.className="msg"; msg.textContent = e.mensaje || "";
+      const row = document.createElement("span"); row.className="row";
+      const est = filaEstado(e.estado);
+      if(est) row.appendChild(est);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "lnk btn-detalle";
+      btn.textContent = "Ver detalle";
+      row.appendChild(btn);
+      ev.appendChild(t); ev.appendChild(s); ev.appendChild(msg); ev.appendChild(row);
+      const det = document.createElement("div");
+      det.className = "det" + (abiertos.has(e.id) ? " on" : "");
+      det.setAttribute("data-for", e.id || "");
+      const lbl = document.createElement("span"); lbl.className="lbl"; lbl.textContent="Detalle técnico";
+      const pre = document.createElement("pre"); pre.textContent = e.detalle || e.ts || "";
+      det.appendChild(lbl); det.appendChild(pre);
+      lista.appendChild(ev);
+      lista.appendChild(det);
+      bindRow(ev, det);
+    }
+    window.scrollTo(0, y);
+  }
+  bindAll();
+  setInterval(async () => {
+    if(document.hidden) return;
+    try{
+      const params = new URLSearchParams(location.search);
+      if(!params.get("ambito")) params.set("ambito", lista.dataset.ambito || "actual");
+      if(!params.get("paso")) params.set("paso", lista.dataset.paso || "todos");
+      const r = await fetch("/api/actividad?" + params.toString(), {cache:"no-store"});
+      if(!r.ok) return;
+      const data = await r.json();
+      if(Array.isArray(data.eventos)) render(data.eventos);
+    }catch(e){}
+  }, 5000);
+})();
+</script>
+{% endblock %}

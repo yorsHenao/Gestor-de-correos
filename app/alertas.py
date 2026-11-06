@@ -85,6 +85,13 @@ def pendientes(limite=5):
     return list(reversed(_avisos[-limite:]))
 
 
+def descartar(tipo):
+    """Quita del banner los avisos de ese tipo; si el problema vuelve, se avisa otra vez."""
+    _avisos[:] = [aviso for aviso in _avisos if aviso["tipo"] != tipo]
+    for clave in [clave for clave in _enviados if clave[0] == tipo]:
+        _enviados.discard(clave)
+
+
 def _toast(titulo, detalle):
     from win11toast import notify
 

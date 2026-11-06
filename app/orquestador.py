@@ -5,16 +5,19 @@ Orden fijo del ciclo: clasificar → rt → slack → entes. RT, Slack
 Códigos de salida de los pasos:
 - 0: bien (aviso si el resumen trae errores).
 - 20: Lupe pide login → alerta y se omiten los pasos que usan Lupe en este ciclo.
+  Quedan en `logs/lupe_pendiente.json` y el scheduler los relanza al volver la sesión.
 - 21: Lupe ocupado → aviso; el paso se reintenta en el siguiente ciclo.
 - otro: error → alerta.
 """
 
+import json
 import logging
 import os
 import subprocess
 import sys
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 from filelock import FileLock, Timeout
@@ -25,7 +28,7 @@ for ruta in (str(RAIZ), str(SCRIPTS)):
     if ruta not in sys.path:
         sys.path.insert(0, ruta)
 
-from app import registro
+from app import actividad, registro
 from app.alertas import alertar, nuevo_ciclo
 from flow_control import FLAG_DETENER, limpiar_detener, solicitar_detener
 
@@ -37,7 +40,15 @@ PASOS = {
     "slack": {"script": "agentes/agente_rts.py", "args": ["slack"], "lupe": True},
     "entes": {"script": "procesar_entes.py", "args": [], "lupe": True},
 }
+
 ORDEN = ["clasificar", "rt", "slack", "entes"]
+ETIQUETAS = {
+    "clasificar": "Clasificar",
+    "rt": "RT",
+    "slack": "Slack",
+    "entes": "Entes",
+    "ciclo": "Ciclo",
+}
 
 CODIGO_LOGIN = 20
 CODIGO_OCUPADO = 21
@@ -45,11 +56,22 @@ TIMEOUT_PASO_SEG = int(float(os.getenv("PASO_TIMEOUT_MIN") or "120") * 60)
 FLAG_PAUSA = RAIZ / "logs" / "servicio.pausado"
 FLAG_ESPERANDO = RAIZ / "logs" / "revision.esperando"
 FLAG_CONTINUAR = RAIZ / "logs" / "revision.continuar"
+PENDIENTE_LUPE = RAIZ / "logs" / "lupe_pendiente.json"
 CANDADO_CICLO = RAIZ / "data" / "ciclo.lock"
 ESPERA_REVISION_SEG = 0.5
+_ORIGENES_SIN_PAUSA = frozenset({"manual", "dashboard"})
 _confirmar = threading.Event()
 _paso_en_curso = None
 _cortar_ciclo = False
+_lanzamiento_pendiente = False
+_lanzamiento_lock = threading.Lock()
+_trabajo = {
+    "activo": False,
+    "paso": None,
+    "estado": None,
+    "ciclo_id": None,
+    "origen": None,
+}
 
 _GRAVEDAD = {"ok": 0, "omitido": 0, "aviso": 1, "error": 2}
 
@@ -65,38 +87,87 @@ def _python():
     return str(consola if actual.name.lower() == "pythonw.exe" and consola.exists() else actual)
 
 
-# ── Pausa del servicio ───────────────────────────────────────────────────
+def _etiqueta(nombre):
+    return ETIQUETAS.get(nombre, nombre or "")
+
+
+def _set_trabajo(**valores):
+    _trabajo.update(valores)
+
+
+def estado_trabajo():
+    activo = ciclo_en_curso() or _lanzamiento_pendiente
+    if not activo:
+        return {
+            "activo": False,
+            "paso": None,
+            "estado": None,
+            "etiqueta": "",
+            "ciclo_id": None,
+            "origen": None,
+            "deteniendo": False,
+            "esperando": False,
+            "finalizando": False,
+        }
+    paso = _paso_en_curso or _trabajo.get("paso")
+    esperando = FLAG_ESPERANDO.exists()
+    finalizando = bool(_cortar_ciclo) or _trabajo.get("estado") == "finalizando"
+    if esperando:
+        estado = "esperando_revision"
+    elif finalizando:
+        estado = "finalizando"
+    elif _lanzamiento_pendiente and not _paso_en_curso:
+        estado = "iniciando"
+    else:
+        estado = _trabajo.get("estado") or "ejecutando"
+    return {
+        "activo": True,
+        "paso": paso,
+        "estado": estado,
+        "etiqueta": _etiqueta(paso) if paso else "Ciclo",
+        "ciclo_id": _trabajo.get("ciclo_id") or actividad.ciclo_actual_id(),
+        "origen": _trabajo.get("origen"),
+        "deteniendo": finalizando,
+        "esperando": esperando,
+        "finalizando": finalizando,
+    }
+
 
 def pausado():
     return FLAG_PAUSA.exists()
 
 
 def pausar():
-    """No arranca más ciclos y pide al paso en curso que pare al terminar su caso."""
     FLAG_PAUSA.parent.mkdir(parents=True, exist_ok=True)
     FLAG_PAUSA.write_text("1", encoding="utf-8")
-    solicitar_detener()
     log.warning("Servicio en pausa", **_extra())
 
 
 def reanudar():
     FLAG_PAUSA.unlink(missing_ok=True)
-    limpiar_detener()
     log.info("Servicio reanudado", **_extra())
 
 
 def detener_paso():
     global _cortar_ciclo
-    if not ciclo_en_curso():
+    if not ciclo_en_curso() and not _lanzamiento_pendiente:
         return False
     _cortar_ciclo = True
+    _set_trabajo(estado="finalizando")
     solicitar_detener()
     log.warning("Parada del paso pedida desde el dashboard", **_extra())
+    actividad.registrar(
+        "paso_detener",
+        "Se solicitó detener el paso en curso.",
+        paso=_paso_en_curso or _trabajo.get("paso") or "ciclo",
+        detalle="FLAG_DETENER",
+        estado="finalizando",
+    )
     return True
 
 
 def paso_detenido():
-    return _cortar_ciclo and ciclo_en_curso()
+    return bool(_cortar_ciclo) and ciclo_en_curso()
 
 
 def _en_pausa():
@@ -121,23 +192,34 @@ def esperando_revision():
 
 
 def confirmar_continuacion():
+    if not esperando_revision():
+        return False
     FLAG_CONTINUAR.parent.mkdir(parents=True, exist_ok=True)
     FLAG_CONTINUAR.write_text("1", encoding="utf-8")
     _confirmar.set()
-
+    actividad.registrar(
+        "revision_continuar",
+        "Continuación confirmada tras clasificar.",
+        paso="clasificar",
+        estado="ok",
+    )
+    return True
 
 def _esperar_confirmacion():
-    """El ciclo sigue en este hilo hasta Continuar, hasta quitar la revisión o hasta la pausa."""
     FLAG_CONTINUAR.unlink(missing_ok=True)
     _confirmar.clear()
     FLAG_ESPERANDO.parent.mkdir(parents=True, exist_ok=True)
     FLAG_ESPERANDO.write_text("1", encoding="utf-8")
+    _set_trabajo(paso="clasificar", estado="esperando_revision")
     log.info("Clasificación lista: esperando confirmación en el dashboard", **_extra())
+    actividad.registrar(
+        "revision_espera",
+        "Clasificación lista. Revisa las etiquetas antes de continuar con RT.",
+        paso="clasificar",
+        estado="esperando",
+    )
     try:
         while True:
-            if _en_pausa():
-                log.warning("Servicio en pausa: el ciclo para durante la revisión", **_extra())
-                return False
             if _cortar_ciclo:
                 log.warning("Paso detenido: el ciclo no sigue", **_extra())
                 return False
@@ -155,6 +237,8 @@ def _esperar_confirmacion():
 
 
 def ciclo_en_curso():
+    if _lanzamiento_pendiente:
+        return True
     candado = FileLock(str(CANDADO_CICLO))
     try:
         candado.acquire(timeout=0)
@@ -164,19 +248,87 @@ def ciclo_en_curso():
     return False
 
 
-# ── Un paso ──────────────────────────────────────────────────────────────
+def reservar_ejecucion():
+    global _lanzamiento_pendiente
+    with _lanzamiento_lock:
+        if _lanzamiento_pendiente:
+            return False
+        candado = FileLock(str(CANDADO_CICLO))
+        try:
+            candado.acquire(timeout=0)
+        except Timeout:
+            return False
+        candado.release()
+        _lanzamiento_pendiente = True
+        _set_trabajo(activo=True, estado="iniciando", paso=None)
+        return True
+
+
+def liberar_reserva():
+    global _lanzamiento_pendiente
+    with _lanzamiento_lock:
+        _lanzamiento_pendiente = False
+
 
 def paso_en_curso():
     return _paso_en_curso
 
 
-def ejecutar_paso(nombre, ciclo_id=None, origen="manual", eco=None):
+def pendientes_lupe():
+    """{"pasos": [...], "fecha": "AAAA-MM-DD HH:MM:SS"} de los pasos que esperan el login, o None."""
+    try:
+        datos = json.loads(PENDIENTE_LUPE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    pasos = [nombre for nombre in datos.get("pasos") or [] if nombre in PASOS]
+    if not pasos:
+        return None
+    return {"pasos": pasos, "fecha": str(datos.get("fecha") or "")}
+
+
+def borrar_pendientes_lupe():
+    PENDIENTE_LUPE.unlink(missing_ok=True)
+
+
+def _guardar_pendientes_lupe(pasos):
+    previos = (pendientes_lupe() or {}).get("pasos") or []
+    juntos = [nombre for nombre in ORDEN if nombre in pasos or nombre in previos]
+    try:
+        PENDIENTE_LUPE.parent.mkdir(parents=True, exist_ok=True)
+        PENDIENTE_LUPE.write_text(
+            json.dumps(
+                {"pasos": juntos, "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+            ),
+            encoding="utf-8",
+        )
+    except OSError as error:
+        log.warning("No se pudieron guardar los pasos pendientes de Lupe: %s", error, **_extra())
+
+
+def _quitar_pendiente_lupe(nombre):
+    pendiente = pendientes_lupe()
+    if not pendiente or nombre not in pendiente["pasos"]:
+        return
+    resto = [paso for paso in pendiente["pasos"] if paso != nombre]
+    if not resto:
+        borrar_pendientes_lupe()
+        return
+    try:
+        PENDIENTE_LUPE.write_text(
+            json.dumps({"pasos": resto, "fecha": pendiente["fecha"]}), encoding="utf-8"
+        )
+    except OSError as error:
+        log.warning("No se pudieron actualizar los pasos pendientes de Lupe: %s", error, **_extra())
+
+
+def ejecutar_paso(nombre, ciclo_id=None, origen="manual", eco=None, modo_automatico=None):
     global _paso_en_curso
-    del ciclo_id
     if nombre not in PASOS:
         raise ValueError(f"Paso desconocido: {nombre}. Opciones: {', '.join(ORDEN)}")
     definicion = PASOS[nombre]
     eco = sys.stdout is not None if eco is None else eco
+    if modo_automatico is None:
+        modo_automatico = origen not in _ORIGENES_SIN_PAUSA
 
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(
@@ -185,17 +337,24 @@ def ejecutar_paso(nombre, ciclo_id=None, origen="manual", eco=None):
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUNBUFFERED"] = "1"
     env["PROYECTO_E_PASO"] = nombre
-    if origen != "manual":
+    if modo_automatico:
         env["LUPE_MODO"] = "automatico"
         env["PROYECTO_E_AUTOMATICO"] = "1"
 
     cmd = [_python(), "-u", str(SCRIPTS / definicion["script"]), *definicion["args"]]
     banderas = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     log.info("Inicio del paso %s", nombre, **_extra(nombre))
+    actividad.registrar(
+        "paso_inicio",
+        f"Empezó {_etiqueta(nombre)}.",
+        paso=nombre,
+        ciclo_id=ciclo_id,
+    )
     inicio = time.monotonic()
     lineas = []
     codigo = None
     _paso_en_curso = nombre
+    _set_trabajo(paso=nombre, estado="finalizando" if _cortar_ciclo else "ejecutando", origen=origen)
     try:
         proc = subprocess.Popen(
             cmd,
@@ -237,6 +396,20 @@ def ejecutar_paso(nombre, ciclo_id=None, origen="manual", eco=None):
         minutos,
         **_extra(nombre),
     )
+    detalle = "\n".join(salida.strip().splitlines()[-12:]) if salida.strip() else f"código={codigo}"
+    mensaje_fin = {
+        "ok": f"{_etiqueta(nombre)} terminó.",
+        "aviso": f"{_etiqueta(nombre)} terminó con avisos.",
+        "error": f"{_etiqueta(nombre)} terminó con error.",
+    }.get(estado, f"{_etiqueta(nombre)} finalizó ({estado}).")
+    actividad.registrar(
+        "paso_fin",
+        mensaje_fin,
+        paso=nombre,
+        detalle=detalle,
+        estado=estado,
+        ciclo_id=ciclo_id,
+    )
     return {"paso": nombre, "estado": estado, "codigo": codigo}
 
 
@@ -268,8 +441,9 @@ def _estado_por_codigo(nombre, codigo, salida):
         alertar(
             "lupe_login",
             "Lupe pide iniciar sesión",
-            "Ejecuta «python main.py login» en este PC y completa el login con Google. "
-            f"El paso {nombre} y los siguientes que usan Lupe se omitieron en este ciclo.",
+            "Usa «Iniciar sesión» en el dashboard y completa el login con Google. "
+            f"El paso {nombre} y los siguientes que usan Lupe quedaron en espera "
+            "y se reanudan solos al iniciar sesión.",
         )
         return "aviso"
     if codigo == CODIGO_OCUPADO:
@@ -280,30 +454,34 @@ def _estado_por_codigo(nombre, codigo, salida):
     return "error"
 
 
-# ── El ciclo completo ────────────────────────────────────────────────────
-
-def ejecutar_ciclo(origen="programado", pasos=None, eco=None):
+def ejecutar_ciclo(origen="programado", pasos=None, eco=None, modo_automatico=None):
     """Corre los pasos en orden. Devuelve el estado del ciclo, u «ocupado» si ya hay uno."""
+    global _lanzamiento_pendiente
     candado = FileLock(str(CANDADO_CICLO))
     CANDADO_CICLO.parent.mkdir(parents=True, exist_ok=True)
     try:
         candado.acquire(timeout=0)
     except Timeout:
+        liberar_reserva()
         log.warning("Ya hay un ciclo en curso; no se arranca otro", **_extra())
         return "ocupado"
 
+    liberar_reserva()
     try:
-        return _ciclo(origen, pasos or ORDEN, eco)
+        return _ciclo(origen, pasos or ORDEN, eco, modo_automatico)
     finally:
         candado.release()
+        _set_trabajo(activo=False, paso=None, estado=None, ciclo_id=None, origen=None)
 
 
-def _ciclo(origen, pasos, eco):
+def _ciclo(origen, pasos, eco, modo_automatico):
     global _cortar_ciclo
     from utils.config_manager import validar_criticos
 
     _cortar_ciclo = False
     nuevo_ciclo()
+    ciclo_id = actividad.iniciar_ciclo_id()
+    _set_trabajo(activo=True, paso=None, estado="ejecutando", ciclo_id=ciclo_id, origen=origen)
     try:
         registro.marcar_ultimo_ciclo()
     except Exception as error:
@@ -313,7 +491,14 @@ def _ciclo(origen, pasos, eco):
     FLAG_CONTINUAR.unlink(missing_ok=True)
     _confirmar.clear()
     log.info("Inicio del ciclo (%s): %s", origen, ", ".join(pasos), **_extra())
-    if FLAG_DETENER.exists():
+    actividad.registrar(
+        "ciclo_inicio",
+        "Empezó el ciclo completo." if len(pasos) > 1 else f"Empezó {_etiqueta(pasos[0])}.",
+        paso="ciclo" if len(pasos) > 1 else pasos[0],
+        detalle=f"origen={origen}; pasos={','.join(pasos)}",
+        ciclo_id=ciclo_id,
+    )
+    if FLAG_DETENER.exists() and not _cortar_ciclo:
         limpiar_detener()
 
     try:
@@ -321,23 +506,46 @@ def _ciclo(origen, pasos, eco):
     except Exception as error:
         alertar("paso_error", "Configuración inválida", str(error))
         log.error("Configuración inválida: %s", error, **_extra())
+        actividad.registrar(
+            "ciclo_fin",
+            "El ciclo no arrancó por configuración inválida.",
+            detalle=str(error),
+            estado="error",
+            ciclo_id=ciclo_id,
+        )
+        actividad.cerrar_ciclo_id()
         return "error"
 
     peor = "ok"
     sin_lupe = False
+    auto = modo_automatico
+    if auto is None:
+        auto = origen not in _ORIGENES_SIN_PAUSA
+
     for indice, nombre in enumerate(pasos):
         if _cortar_ciclo:
             log.warning("Paso detenido: el ciclo no sigue", **_extra())
             break
-        if pausado() and origen != "manual":
+        if pausado() and origen not in _ORIGENES_SIN_PAUSA:
             log.warning("Servicio en pausa: el ciclo para antes de %s", nombre, **_extra())
             break
         if sin_lupe and PASOS[nombre]["lupe"]:
             log.warning("Paso %s omitido: Lupe pide iniciar sesión", nombre, **_extra(nombre))
             continue
-        resultado = ejecutar_paso(nombre, origen=origen, eco=eco)
+        resultado = ejecutar_paso(
+            nombre,
+            ciclo_id=ciclo_id,
+            origen=origen,
+            eco=eco,
+            modo_automatico=auto,
+        )
         if resultado["codigo"] == CODIGO_LOGIN:
             sin_lupe = True
+            _guardar_pendientes_lupe(
+                [nombre] + [paso for paso in pasos[indice + 1 :] if PASOS[paso]["lupe"]]
+            )
+        elif PASOS[nombre]["lupe"] and resultado["codigo"] != CODIGO_OCUPADO:
+            _quitar_pendiente_lupe(nombre)
         if _GRAVEDAD[resultado["estado"]] > _GRAVEDAD[peor]:
             peor = resultado["estado"]
         if _cortar_ciclo:
@@ -356,4 +564,12 @@ def _ciclo(origen, pasos, eco):
             break
 
     log.info("Fin del ciclo: %s", peor, **_extra())
+    actividad.registrar(
+        "ciclo_fin",
+        f"El ciclo terminó ({peor}).",
+        detalle=f"origen={origen}",
+        estado=peor,
+        ciclo_id=ciclo_id,
+    )
+    actividad.cerrar_ciclo_id()
     return peor
