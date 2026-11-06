@@ -155,6 +155,17 @@ def listar_casos_rt_en_slack():
         )
     ]
 
+def listar_casos_rt_respuesta_pendiente():
+    return [
+        fila["mensaje_id"]
+        for fila in _consultar(
+            "SELECT mensaje_id FROM casos_rt WHERE estado = ? AND thread_slack != '' "
+            "AND COALESCE(json_extract(datos, '$.slack.decision'), '') != '' "
+            "AND COALESCE(json_extract(datos, '$.completado'), 0) = 0",
+            ("Nuevo",),
+        )
+    ]
+
 
 def buscar_duplicado_rt(id_rt):
     id_rt = str(id_rt or "").strip()

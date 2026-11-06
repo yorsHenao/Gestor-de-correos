@@ -132,6 +132,36 @@ def listar_pendientes_slack():
     return registro.listar_casos_rt_en_slack()
 
 
+def listar_respuestas_pendientes():
+    from app import registro
+
+    return registro.listar_casos_rt_respuesta_pendiente()
+
+
+def _ruta_foto_prueba(mensaje_id):
+    from app import registro
+
+    nombre = "".join(c for c in str(mensaje_id) if c.isalnum() or c in "-_")
+    if not nombre:
+        raise ValueError("Falta el id del caso para la imagen de prueba.")
+    return registro.DB_PATH.parent / "fotos_prueba" / f"{nombre}.png"
+
+
+def guardar_foto_prueba(mensaje_id, foto_bytes):
+    ruta = _ruta_foto_prueba(mensaje_id)
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_bytes(foto_bytes)
+
+
+def leer_foto_prueba(mensaje_id):
+    ruta = _ruta_foto_prueba(mensaje_id)
+    return ruta.read_bytes() if ruta.is_file() else None
+
+
+def borrar_foto_prueba(mensaje_id):
+    _ruta_foto_prueba(mensaje_id).unlink(missing_ok=True)
+
+
 def referencia_duplicado_rt(mensaje_id):
     try:
         info = leer_caso(mensaje_id)
