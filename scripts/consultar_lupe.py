@@ -45,9 +45,32 @@ def _click_filtro_busqueda(page, clave_filtro):
     raise ultimo_error or TimeoutError(f"Filtro no encontrado: {etiquetas}")
 
 
-def _capturar_perfil(page, ruta_caso, aviso="Captura del perfil tomada"):
+def _capturar_perfil(page, ruta_caso, aviso="Captura del perfil tomada", permitir_cabecera=False):
     time.sleep(3)
-    screenshot_bytes = page.screenshot(full_page=True)
+    if page.locator("div.row.information-card.white").count():
+        box = page.locator("div.row.information-card.white").first.bounding_box()
+    else:
+        box = None
+    if box:
+        screenshot_bytes = page.screenshot(clip={
+            "x": box["x"],
+            "y": box["y"],
+            "width": 450,
+            "height": 270
+        })
+    elif permitir_cabecera and _leer_estado_global(page) == "Habilitado":
+        cajas = [_campo_cabecera(page, etiqueta).bounding_box() for etiqueta in ("ID", "Estado")]
+        if any(not caja for caja in cajas):
+            raise TimeoutError("Lupe no mostró la cabecera necesaria para la evidencia")
+        x = min(caja["x"] for caja in cajas)
+        y = min(caja["y"] for caja in cajas)
+        ancho = max(caja["x"] + caja["width"] for caja in cajas) - x
+        alto = max(caja["y"] + caja["height"] for caja in cajas) - y
+        if not (x >= 0 and y >= 0 and 0 < ancho <= 450 and 0 < alto <= 270):
+            raise TimeoutError("Lupe no permite un recorte seguro de ID y Estado")
+        screenshot_bytes = page.screenshot(clip={"x": x, "y": y, "width": ancho, "height": alto})
+    else:
+        raise TimeoutError("Lupe no mostró la tarjeta del perfil para la evidencia")
     if not screenshot_bytes:
         raise TimeoutError("Lupe no entregó la captura del perfil")
     if aviso:
@@ -374,6 +397,7 @@ def _verificar_habilitado(ruta_caso, id_rt, page):
                 page,
                 ruta_caso,
                 aviso="Cuenta Habilitada tras OPS: captura tomada",
+                permitir_cabecera=True,
             )
             informacion = storage.leer_caso(ruta_caso)
             informacion["lupe"] = informacion.get("lupe") or {}

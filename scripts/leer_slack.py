@@ -1,4 +1,6 @@
 import sys
+import re
+import traceback
 from datetime import datetime
 from pathlib import Path
 import httplib2
@@ -153,6 +155,9 @@ def _foto_bloqueado(archivo, informacion, clog):
 def _completar_respuesta(archivo, decision, foto_bytes, lupe, clog, retomado=False):
     """Genera lo que falte y entrega la respuesta. True si quedó completado, False si sigue pendiente."""
     informacion = storage.leer_caso(archivo)
+    if informacion.get("completado"):
+        clog.info("El caso ya estaba completado; no se repite la respuesta")
+        return True
     if decision in DECISIONES_HABILITADO:
         if foto_bytes is None:
             habilitado, foto_bytes = verificar_y_capturar_habilitado(archivo, page=lupe.pagina())
@@ -209,8 +214,18 @@ def _registro_recuperacion(informacion, motivo):
     }
 
 
+def _motivo_respuesta(error):
+    texto = resumir_error(error)
+    texto = re.sub(r"https?://\S+", "[URL omitida]", texto, flags=re.I)
+    texto = re.sub(r"\bBearer\s+\S+", "Bearer [oculto]", texto, flags=re.I)
+    return re.sub(
+        r"\b(token|access_token|refresh_token|api_key|password|secret|authorization)\s*[:=]\s*\S+",
+        r"\1=[oculto]", texto, flags=re.I,
+    )
+
+
 def _registrar_falla(archivo, error, clog, contadores):
-    motivo = resumir_error(error)
+    motivo = _motivo_respuesta(error)
     try:
         informacion = storage.leer_caso(archivo)
         if informacion.get("completado"):
@@ -226,7 +241,7 @@ def _registrar_falla(archivo, error, clog, contadores):
     except Exception as error_guardado:
         clog.error(
             "Respuesta pendiente: no se pudo registrar la falla (%s); se reintentará con la decisión guardada",
-            resumir_error(error_guardado),
+            _motivo_respuesta(error_guardado),
         )
         contadores["errores"] += 1
         return True
@@ -378,11 +393,14 @@ def _revisar_pendientes(lupe):
         resultado = _intentar_respuesta(archivo, decision, None, lupe, clog, contadores, True)
         fallas_temporales += resultado == "temporal"
 
-    resumen(log, **contadores)
+    contadores["errores"] += contadores["revision_manual"]
+    resumen(log, **contadores, reintentos_pendientes=fallas_temporales)
     if fallas_temporales:
-        raise RuntimeError(
-            f"{fallas_temporales} caso(s) con decisión de OPS guardada quedaron con la respuesta "
-            "pendiente por una falla de conexión; se retomarán en el próximo ciclo"
+        log.warning(
+            "Resultado parcial: %d completados, %d respuestas con recuperación pendiente, %d manuales. "
+            "Las decisiones quedan guardadas para la próxima ejecución de Slack; "
+            "si el servicio está en pausa o no está activo, no se reintentan automáticamente.",
+            contadores["completados"], fallas_temporales, contadores["revision_manual"],
         )
 
 
@@ -392,6 +410,11 @@ def _intentar_respuesta(archivo, decision, foto_bytes, lupe, clog, contadores, r
     except (DetenerFlujo, LupeSesionRequerida, LupeOcupado):
         raise
     except Exception as error:
+        traza = "\n".join(
+            f"  {Path(marco.filename).name}:{marco.lineno} en {marco.name}"
+            for marco in traceback.extract_tb(error.__traceback__)
+        )
+        clog.error("Falla de respuesta: %s\nTraza:\n%s", _motivo_respuesta(error), traza)
         return "temporal" if _registrar_falla(archivo, error, clog, contadores) else "manual"
     if completado:
         contadores["completados"] += 1
