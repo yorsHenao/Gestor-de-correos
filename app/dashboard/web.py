@@ -26,7 +26,9 @@ _CACHE_SEG = 300
 
 _ORDEN_RT = (
     "Completado",
+    "Petición repetida - caso gestionado",
     "En Slack - pendiente",
+    "Petición repetida - caso pendiente",
     "Nuevo",
     "Caso manual",
     "Sin cuenta",

@@ -324,8 +324,22 @@ def _procesar_cola(lupe):
         if duplicado:
             nombre_referencia, estado_referencia, regla_referencia = duplicado
             duplicados_vistos[id_rt] = duplicado
+            mensaje_id = mensaje["id"]
+            datos["correo"]["gmail_id"] = mensaje_id
             _anotar_duplicado(nombre_referencia, datos["correo"])
-            storage.marcar_leido(mensaje["id"], servicio)
+            try:
+                storage.registrar_peticion_repetida(
+                    mensaje_id, datos, estado_referencia
+                )
+            except Exception as error:
+                errores += 1
+                log_caso(log, nombre_referencia).error(
+                    "Duplicado del RT %s: no se pudo registrar en Sheet; el correo sigue sin leer: %s",
+                    id_rt,
+                    error,
+                )
+                continue
+            storage.marcar_leido(mensaje_id, servicio)
             log_caso(log, nombre_referencia).info(
                 "Duplicado del RT %s (%s, regla %s): no se repite la gestión; correo marcado leído",
                 id_rt,

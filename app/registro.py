@@ -139,7 +139,10 @@ def leer_caso_rt(mensaje_id):
 def listar_casos_rt_abiertos():
     return _consultar(
         "SELECT mensaje_id, estado FROM casos_rt "
-        "WHERE estado NOT IN ('Completado', 'Caso manual', 'Sin cuenta - enviado')"
+        "WHERE estado NOT IN ("
+        "'Completado', 'Caso manual', 'Sin cuenta - enviado', "
+        "'Petición repetida - caso gestionado', "
+        "'Petición repetida - caso pendiente')"
     )
 
 

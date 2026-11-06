@@ -10,6 +10,12 @@ from config import DRIVE_SHEETS_ID
 ESTADO_EN_SLACK = "En Slack - pendiente"
 ESTADOS_PENDIENTE_SLACK = frozenset({ESTADO_EN_SLACK, "En Slack"})
 ESTADOS_DUPLICADO_RT = ESTADOS_PENDIENTE_SLACK | {"Completado"}
+ESTADO_PETICION_REPETIDA_GESTIONADO = "Petición repetida - caso gestionado"
+ESTADO_PETICION_REPETIDA_PENDIENTE = "Petición repetida - caso pendiente"
+ESTADOS_PETICION_REPETIDA = frozenset({
+    ESTADO_PETICION_REPETIDA_GESTIONADO,
+    ESTADO_PETICION_REPETIDA_PENDIENTE,
+})
 CIERRES_QA = frozenset({"Completado", "Caso manual"})
 TEXTO_PEDIR_CORREO = "pedir correo"
 
@@ -144,6 +150,61 @@ def buscar_duplicado_rt(id_rt):
     from app import registro
 
     return registro.buscar_duplicado_rt(id_rt)
+
+
+def estado_peticion_repetida(estado_referencia):
+    if estado_referencia in ESTADOS_PENDIENTE_SLACK:
+        return ESTADO_PETICION_REPETIDA_PENDIENTE
+    return ESTADO_PETICION_REPETIDA_GESTIONADO
+
+
+def registrar_peticion_repetida(mensaje_id, datos, estado_referencia):
+    from app import registro
+
+    correo = datos.setdefault("correo", {})
+    correo["gmail_id"] = correo.get("gmail_id") or mensaje_id
+    lupe = datos.setdefault("lupe", {})
+    lupe["regla_bloqueo"] = ""
+    slack = datos.setdefault("slack", {})
+    slack["thread_id"] = ""
+    datos["completado"] = False
+    estado = estado_peticion_repetida(estado_referencia)
+    registro.guardar_caso_rt(datos, estado)
+    _actualizar_sheet_peticion_repetida(datos, estado)
+    return estado
+
+
+def _fila_peticion_repetida(datos, estado):
+    correo = datos.get("correo") or {}
+    nombre = (
+        correo.get("nombre_peticionario")
+        or correo.get("remitente_nombre")
+        or ""
+    )
+    if falta_correo_peticionario(correo.get("correo_peticionario")):
+        email = TEXTO_PEDIR_CORREO
+    else:
+        email = correo.get("correo_peticionario") or ""
+    return [
+        nombre,
+        email,
+        str(correo.get("id_rt") or ""),
+        estado,
+        correo.get("fecha_recibido") or "",
+        "",
+        correo.get("gmail_id") or "",
+    ]
+
+
+def _actualizar_sheet_peticion_repetida(datos, estado):
+    if not SHEETS_ID:
+        raise RuntimeError("No hay hoja de Sheets configurada para registrar la petición repetida.")
+    guardar_fila(
+        SHEETS_ID,
+        _fila_peticion_repetida(datos, estado),
+        columna_clave="G",
+        ultima_columna="G",
+    )
 
 
 def _fila_sheet(datos):

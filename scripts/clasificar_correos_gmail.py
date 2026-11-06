@@ -1,5 +1,6 @@
 import sys
 import re
+from unicodedata import normalize
 from email.utils import parseaddr
 from pathlib import Path
 from dotenv import load_dotenv
@@ -202,9 +203,13 @@ def _es_reclamo_aliado_operativo(texto):
 def _menciona_sancion_rappi(texto):
     """Suspensión, bloqueo o desbloqueo: la petición puede ir a OPS aunque diga desactivada."""
     t = " ".join(str(texto or "").lower().split())
+    t = re.sub(r"[\u0300-\u036f]", "", normalize("NFD", t))
     return any(
         p in t
         for p in ("suspendid", "inhabilitad", "deshabilitad", "bloque", "desbloque")
+    ) or (
+        re.search(r"\bcuentas?\b", t) is not None
+        and re.search(r"\b(?:suspension|inhabilitacion)(?:es)?\b", t) is not None
     )
 
 
