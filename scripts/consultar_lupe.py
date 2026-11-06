@@ -47,17 +47,15 @@ def _click_filtro_busqueda(page, clave_filtro):
 
 def _capturar_perfil(page, ruta_caso, aviso="Captura del perfil tomada"):
     time.sleep(3)
-    box = page.locator("div.row.information-card.white").first.bounding_box()
-    screenshot_bytes = page.screenshot(clip={
-        "x": box["x"],
-        "y": box["y"],
-        "width": 450,
-        "height": 270
-    })
+    screenshot_bytes = page.screenshot(full_page=True)
+    if not screenshot_bytes:
+        raise TimeoutError("Lupe no entregó la captura del perfil")
     if aviso:
         log_caso(log, ruta_caso).info(aviso)
 
     informacion = storage.leer_caso(ruta_caso)
+    informacion["slack"] = informacion.get("slack") or {}
+    informacion["slack"]["foto_prueba"] = informacion["slack"].get("foto_prueba") or {}
     informacion["slack"]["foto_prueba"]["aplica"] = True
     storage.guardar_caso(ruta_caso, informacion)
 
@@ -318,6 +316,22 @@ def verificar_y_capturar_habilitado(ruta_caso, page=None):
     return _verificar_habilitado(ruta_caso, id_rt, page)
 
 
+def _campo_cabecera(page, etiqueta):
+    return page.locator("span.field").filter(
+        has=page.locator("span.bold", has_text=re.compile(rf"^\s*{re.escape(etiqueta)}\s*:", re.I))
+    ).first
+
+
+def _leer_estado_global(page):
+    campo = _campo_cabecera(page, "Estado")
+    campo.wait_for(state="visible", timeout=10000)
+    texto = re.sub(r"^\s*Estado\s*:\s*", "", campo.inner_text(timeout=10000), flags=re.I).strip()
+    estados = {e.lower(): e for e in ("Habilitado", "Inhabilitado", "Bloqueado", "Suspendido")}
+    if texto.lower() not in estados:
+        raise TimeoutError("Lupe no confirmó el estado global de la cuenta")
+    return estados[texto.lower()]
+
+
 def _verificar_habilitado(ruta_caso, id_rt, page):
     try:
         page.goto(URL_LUPE)
@@ -336,11 +350,19 @@ def _verificar_habilitado(ruta_caso, id_rt, page):
             log_caso(log, ruta_caso).warning("Lupe no abrió el ID %s", id_rt)
             return None, None
 
-        page.wait_for_selector("img.circle.responsive-img.ng-star-inserted")
-        estado = page.locator(
-            "sk-general-information span.ng-star-inserted"
-        ).first.inner_text().strip()
-        nombre = page.locator("div.name").first.inner_text().split("\n")[0].strip()
+        estado = _leer_estado_global(page)
+        id_visible = _campo_cabecera(page, "ID").inner_text(timeout=10000)
+        if not re.fullmatch(rf"\s*ID\s*:\s*{re.escape(str(id_rt))}\s*", id_visible, re.I):
+            raise TimeoutError("Lupe no confirmó el ID de la cuenta consultada")
+        nombre_campo = page.locator("div.name").first
+        if nombre_campo.is_visible():
+            nombre = nombre_campo.inner_text().split("\n")[0].strip()
+        else:
+            nombre = re.sub(
+                r"^\s*Rt\s*:\s*", "", _campo_cabecera(page, "Rt").inner_text(timeout=10000), flags=re.I
+            ).strip()
+        if not nombre:
+            raise TimeoutError("Lupe no confirmó el nombre de la cuenta consultada")
         if _perfil_anonimizado({"nombre": nombre, "documento": ""}):
             log_caso(log, ruta_caso).warning(
                 "Lupe: perfil anonimizado (%s); no se trata como Habilitada", nombre
@@ -353,6 +375,10 @@ def _verificar_habilitado(ruta_caso, id_rt, page):
                 ruta_caso,
                 aviso="Cuenta Habilitada tras OPS: captura tomada",
             )
+            informacion = storage.leer_caso(ruta_caso)
+            informacion["lupe"] = informacion.get("lupe") or {}
+            informacion["lupe"]["estado"] = estado
+            storage.guardar_caso(ruta_caso, informacion)
             return True, foto_bytes
 
         return False, None

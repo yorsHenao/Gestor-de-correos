@@ -104,7 +104,7 @@ def _respuesta_pendiente(informacion) -> str | None:
     decision = (slack.get("decision") or "").strip()
     if decision in DECISIONES_HABILITADO:
         return decision
-    if decision == "mantener_bloqueo" and (slack.get("causal_elegida") or "").strip():
+    if decision == "mantener_bloqueo" and str(slack.get("causal_elegida") or "").strip():
         return decision
     return None
 
@@ -170,6 +170,8 @@ def _completar_respuesta(archivo, decision, foto_bytes, lupe, clog, retomado=Fal
                     decision,
                 )
                 return None
+        if not foto_bytes:
+            raise RespuestaPendiente("Lupe no entregó la captura de evidencia de la cuenta habilitada")
         enviado = enviar_cuenta_habilitada(archivo, foto_bytes, crear_borrador=CONTROL_CALIDAD)
         formato = "habilitado"
     else:
