@@ -45,7 +45,8 @@ PREGUNTAS = {
 }
 IA = {
     "GROQ_API_KEY": ("Clave de Groq (empieza por gsk_)", lambda v: v.startswith("gsk_") and len(v) > 20),
-    "GEMINI_API_KEY": ("Clave de Gemini (empieza por AIza)", lambda v: v.startswith("AIza") and len(v) > 20),
+    "GEMINI_API_KEY": ("Clave de Gemini (empieza por AIza o AQ.)",
+                       lambda v: v.startswith(("AIza", "AQ.")) and len(v) > 20),
 }
 
 

@@ -253,6 +253,8 @@ def _motivo_ia(error):
         return "aviso", "clave válida pero sin cuota por ahora (429)"
     if codigo == 404 or "model" in texto and ("not found" in texto or "does not exist" in texto):
         return "falta", "el modelo configurado no existe (404)"
+    if codigo == 504 or "deadline_exceeded" in texto or "timed out" in texto:
+        return "aviso", "clave válida pero la IA no respondió a tiempo (504)"
     return "falta", f"error {codigo or type(error).__name__}"
 
 
@@ -268,19 +270,22 @@ def revisar_ia(inf, config, groq_cliente=None, gemini_cliente=None):
                 model=config.GROQ_MODEL, messages=[{"role": "user", "content": "di ok"}], max_tokens=16)
             resultados.append(("Groq", "ok", ""))
         except Exception as error:
-            resultados.append(("Groq",) + _motivo_ia(error))
+            resultados.append((f"Groq ({config.GROQ_MODEL})",) + _motivo_ia(error))
     if config.GEMINI_API_KEY:
         try:
             from google.genai import types
             if gemini_cliente is None:
                 from google import genai
-                gemini_cliente = genai.Client(api_key=config.GEMINI_API_KEY)
+                gemini_cliente = genai.Client(
+                    api_key=config.GEMINI_API_KEY,
+                    http_options=types.HttpOptions(timeout=config.GEMINI_TIMEOUT_SEG * 1000),
+                )
             gemini_cliente.models.generate_content(
                 model=config.GEMINI_MODEL, contents="di ok",
                 config=types.GenerateContentConfig(max_output_tokens=16))
             resultados.append(("Gemini", "ok", ""))
         except Exception as error:
-            resultados.append(("Gemini",) + _motivo_ia(error))
+            resultados.append((f"Gemini ({config.GEMINI_MODEL})",) + _motivo_ia(error))
     if not resultados:
         inf.falta("No hay claves de IA (GROQ_API_KEY o GEMINI_API_KEY)")
         return

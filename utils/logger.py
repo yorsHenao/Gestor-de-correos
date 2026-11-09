@@ -42,12 +42,16 @@ def resumir_error(error):
     """Devuelve una causa breve y estable para consola y alertas."""
     texto = " ".join(str(error or "").split())
     bajo = texto.lower()
+    if "error code: 413" in bajo or "request too large" in bajo:
+        return "Correo demasiado grande para la IA (413)"
     if "429" in texto or "resource_exhausted" in bajo or "rate_limit" in bajo:
         segundos = segundos_reintento(texto)
         espera = f", reintentar en {segundos:g} s" if segundos is not None else ""
         return f"Cuota de IA agotada (429){espera}"
     if "503" in texto or "unavailable" in bajo:
         return "IA no disponible (alta demanda, 503)"
+    if "deadline_exceeded" in bajo:
+        return "La IA no respondió a tiempo (504)"
     nombre = type(error).__name__
     if nombre == "TargetClosedError" or (
         "target page, context or browser has been closed" in bajo

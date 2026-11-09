@@ -111,7 +111,7 @@ Antes de correr `INSTALAR.bat`, cada persona necesita:
 3. **Git**, también por ticket si no lo tienes (`git --version` debe responder).
 4. **Acceso de lectura al repositorio** para poder clonarlo y luego actualizar con `git pull`.
 5. **Tu propio `credentials.json`**: el JSON del cliente OAuth de tipo *Aplicación de escritorio* descargado de Google Cloud (ver [5.1](#51-proyecto-en-google-cloud-y-credentialsjson)). Guárdalo en `data-json/credentials.json`.
-6. **Tus claves de IA**: al menos una de **Groq** (`gsk_...`) o **Google Gemini** (`AIza...`). Son personales.
+6. **Tus claves de IA**: al menos una de **Groq** (`gsk_...`) o **Google Gemini** (`AIza...` o `AQ....`, según la cuenta de AI Studio). Son personales.
 7. **El token del bot de Slack** (`xoxb-...`), que **Jeisembert entrega personalmente** a cada persona. No se comparte por chat ni se guarda en el repositorio.
 8. Acceso a **Lupe** (`https://lupe.rappi.com/`) con tu cuenta de Google.
 
@@ -459,7 +459,9 @@ GROQ_API_KEY2=
 GROQ_MODEL=openai/gpt-oss-120b
 
 GEMINI_API_KEY=AIzaSy_tu_clave_gemini
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.8-flash
+# Segundos máximos de espera por respuesta de Gemini (vacío = 120)
+GEMINI_TIMEOUT_SEG=
 
 # ============================================================================
 # 6. LUPE Y FORMULARIO DE ENTES
@@ -657,7 +659,9 @@ Se crea automáticamente en el primer arranque (no requiere migraciones manuales
 | **`INSTALAR.bat`: falta Python 3.13** | Python no está instalado o no está en el PATH. | Pídelo por ticket (Python 3.13 de 64 bits con *Add python.exe to PATH*) y vuelve a correr `INSTALAR.bat`. |
 | **El instalador dice que el JSON no sirve** | Elegiste un archivo que no es un cliente OAuth (por ejemplo una cuenta de servicio o un token). | Descarga en Google Cloud el JSON de *OAuth client ID* tipo *Aplicación de escritorio* y elígelo de nuevo. |
 | **Slack `not_in_channel` o `invalid_auth`** | El bot no está en el canal o el token es incorrecto. | Invita al bot al canal o corrige `SLACK_BOT_TOKEN` en el `.env`. |
-| **IA `401` / `429` / `404`** | Clave inválida / límite de uso / modelo inexistente. | `401`: corrige la clave en `.env`. `429`: espera o usa la otra IA. `404`: revisa `GROQ_MODEL` o `GEMINI_MODEL`. |
+| **IA `401` / `429` / `404`** | Clave inválida / límite de uso / modelo inexistente. | `401`: corrige la clave en `.env`. `429`: espera o usa la otra IA. `404`: revisa `GROQ_MODEL` o `GEMINI_MODEL`; las cuentas nuevas de Gemini ya no tienen `gemini-2.5-flash` y deben usar `gemini-3.8-flash`. |
+| **IA `413`: «Correo demasiado grande para la IA»** | El correo supera el límite de tokens por minuto del plan gratuito de Groq. No se arregla cambiando la clave. | El programa pasa directo a Gemini. Si pasa seguido, usa `IA_PROVIDER=gemini`. |
+| **IA `504`: «La IA no respondió a tiempo»** | Gemini tardó más que `GEMINI_TIMEOUT_SEG` (por defecto 120 s) o está saturado. | Se reintenta solo; si persiste, sube `GEMINI_TIMEOUT_SEG` en el `.env` o prueba otro `GEMINI_MODEL`. |
 | **`ACTUALIZAR.bat` se detiene por cambios locales** | Editaste archivos del repositorio. | Descártalos (`git checkout -- .`) o guárdalos aparte y vuelve a correrlo. |
 | **`Variables críticas faltantes en el .env`** | Falta alguna de las 5 variables obligatorias o ambas claves de IA. | Verifica en `.env` que estén definidas `DRIVE_SHEETS_ID`, `DRIVE_RESPONSES_FOLDER`, `GMAIL_LABEL_ID`, `GMAIL_REPLY_TO`, `SLACK_REVIEW_CHANNEL_ID` y al menos `GROQ_API_KEY` o `GEMINI_API_KEY`. |
 | **Alerta: «Lupe pide iniciar sesión» (código `20`)** | Expiró la sesión de Google dentro del perfil de Chromium de Lupe. | Pulsa **Iniciar sesión en Lupe** en el Dashboard (o ejecuta `python main.py login` en una terminal) y completa el acceso con Google en la ventana que se abre en el PC del servicio. Si el botón avisa que Lupe está en uso, espera a que termine el ciclo o paso. |

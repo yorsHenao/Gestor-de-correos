@@ -57,8 +57,8 @@ def main(argv=None):
         estado = orquestador.ejecutar_ciclo(origen="manual")
         return 0 if estado in ("ok", "aviso") else 1
     if args.comando == "paso":
-        resultado = orquestador.ejecutar_paso(args.nombre, origen="manual")
-        return 0 if resultado["estado"] in ("ok", "aviso") else 1
+        estado = orquestador.ejecutar_ciclo(origen="manual", pasos=[args.nombre])
+        return 0 if estado in ("ok", "aviso") else 1
     if args.comando == "pausar":
         orquestador.pausar()
         return 0

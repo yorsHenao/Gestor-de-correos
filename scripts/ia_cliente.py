@@ -5,7 +5,15 @@ from google import genai
 from google.genai import types
 from groq import Groq
 
-from config import GEMINI_API_KEY, GEMINI_MODEL, GROQ_API_KEY, GROQ_API_KEY2, GROQ_MODEL, IA_PROVIDER
+from config import (
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+    GEMINI_TIMEOUT_SEG,
+    GROQ_API_KEY,
+    GROQ_API_KEY2,
+    GROQ_MODEL,
+    IA_PROVIDER,
+)
 from utils.logger import obtener_log, segundos_reintento
 
 log = obtener_log()
@@ -15,7 +23,14 @@ _GEMINI_MODEL = GEMINI_MODEL
 _GROQ_MODEL = GROQ_MODEL
 _ESPERAS_LIMITE = (1, 2, 4)
 _TOPE_ESPERA = 20
-_cliente_gemini = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+_cliente_gemini = (
+    genai.Client(
+        api_key=GEMINI_API_KEY,
+        http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_SEG * 1000),
+    )
+    if GEMINI_API_KEY
+    else None
+)
 _cliente_groq = Groq(api_key=GROQ_API_KEY2 or GROQ_API_KEY) if (GROQ_API_KEY2 or GROQ_API_KEY) else None
 
 
@@ -56,13 +71,18 @@ def _llamar_groq(prompt, system):
 
 def _codigo_limite(error):
     codigo = getattr(error, "status_code", None) or getattr(error, "code", None)
-    if codigo in (429, 503):
-        return codigo
     texto = str(error)
+    # Groq marca el 413 como rate_limit_exceeded, pero el prompt nunca cabrá: no se reintenta.
+    if codigo == 413 or "request too large" in texto.lower():
+        return 0
+    if codigo in (429, 503, 504):
+        return codigo
     if "429" in texto or "rate_limit" in texto.lower():
         return 429
     if "503" in texto or "UNAVAILABLE" in texto:
         return 503
+    if "DEADLINE_EXCEEDED" in texto:
+        return 504
     return 0
 
 

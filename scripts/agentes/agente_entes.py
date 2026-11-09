@@ -41,6 +41,11 @@ CAUSALES = (
     "Queja Cashback 99%",
     "Eliminación Datos",
 )
+# Tope del texto del correo en el prompt: el plan gratuito de Groq rechaza (413)
+# peticiones de más de 8000 tokens por minuto.
+LIMITE_TEXTO = 12000
+RESERVA_PDF = 5000
+_CORTE = "\n[...]\n"
 _ANIO = re.compile(r"\b(?:19|20)\d{2}\b")
 _DIA_MES = re.compile(r"^\d{1,2}[/-]\d{1,2}$")
 _NOMBRES_RAPPI = {
@@ -71,6 +76,7 @@ class AgenteEntes:
             and not str(item.get("mime", "")).startswith("image/")
         ]
         lista_adjuntos = ", ".join(nombres) if nombres else "(ninguno)"
+        cuerpo_prompt, pdf_prompt = _recortar_texto(cuerpo, texto_pdf)
         system = (
             "Eres un asistente que analiza correos de peticiones de usuarios "
             "de la app Rappi y responde ÚNICAMENTE con JSON válido, sin texto adicional."
@@ -130,9 +136,9 @@ REMITENTE: {remitente}
 ASUNTO: {asunto}
 ADJUNTOS (sin imágenes): {lista_adjuntos}
 CUERPO:
-{cuerpo}
+{cuerpo_prompt}
 PDF:
-{texto_pdf or "(sin texto de PDF)"}
+{pdf_prompt or "(sin texto de PDF)"}
 """
         resultado = llamar_json(prompt, system, operacion="extracción petición entes")
         return _normalizar(
@@ -144,6 +150,26 @@ PDF:
             remitente,
             anio,
         )
+
+
+def _recortar_texto(cuerpo, texto_pdf):
+    """Reparte LIMITE_TEXTO entre cuerpo y PDF; lo que un lado no usa lo toma el otro."""
+    cuerpo = (cuerpo or "").strip()
+    texto_pdf = (texto_pdf or "").strip()
+    cupo_pdf = min(len(texto_pdf), RESERVA_PDF)
+    cupo_cuerpo = LIMITE_TEXTO - cupo_pdf
+    if len(cuerpo) < cupo_cuerpo:
+        cupo_pdf = min(len(texto_pdf), cupo_pdf + (cupo_cuerpo - len(cuerpo)))
+    return _recortar(cuerpo, cupo_cuerpo), _recortar(texto_pdf, cupo_pdf)
+
+
+def _recortar(texto, cupo):
+    """Conserva inicio y final: en un reenvío el De/From original suele quedar al fondo."""
+    if len(texto) <= cupo:
+        return texto
+    cabeza = (cupo * 2) // 3
+    cola = cupo - cabeza - len(_CORTE)
+    return texto[:cabeza] + _CORTE + texto[-cola:] if cola > 0 else texto[:cupo]
 
 
 def _normalizar(resultado, fecha_correo, cuerpo, adjuntos, texto_pdf, remitente, anio):
