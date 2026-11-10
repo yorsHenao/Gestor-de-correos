@@ -1,21 +1,38 @@
 import json
 import logging
+import re
+from datetime import date, datetime, timedelta
 from email.utils import parseaddr
 from pathlib import Path
 
 from autenticar import autenticar
 from googleapiclient.discovery import build
-from config import DRIVE_SHEETS_ID
+from config import (
+    CORREOS_REVISION_MANUAL,
+    DRIVE_SHEETS_ID,
+    GMAIL_REPLY_TO,
+    VENTANA_PETICION_REPETIDA_DIAS,
+)
 
 ESTADO_EN_SLACK = "En Slack - pendiente"
 ESTADOS_PENDIENTE_SLACK = frozenset({ESTADO_EN_SLACK, "En Slack"})
 ESTADOS_DUPLICADO_RT = ESTADOS_PENDIENTE_SLACK | {"Completado"}
 ESTADO_PETICION_REPETIDA_GESTIONADO = "Petición repetida - caso gestionado"
 ESTADO_PETICION_REPETIDA_PENDIENTE = "Petición repetida - caso pendiente"
+ESTADO_PETICION_REPETIDA_REVISAR = "Petición repetida - revisar"
 ESTADOS_PETICION_REPETIDA = frozenset({
     ESTADO_PETICION_REPETIDA_GESTIONADO,
     ESTADO_PETICION_REPETIDA_PENDIENTE,
+    ESTADO_PETICION_REPETIDA_REVISAR,
 })
+ESTADOS_SIN_CUENTA = frozenset({"Sin cuenta - enviado", "Sin cuenta - pendiente"})
+ESTADOS_CRUCE_PETICIONARIO = ESTADOS_DUPLICADO_RT | {"Caso manual"} | ESTADOS_SIN_CUENTA
+CORREO_HUB = "recepcion.hub@rappi.com"
+MESES_FECHA = {
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
+    "julio": 7, "agosto": 8, "septiembre": 9, "setiembre": 9, "octubre": 10,
+    "noviembre": 11, "diciembre": 12,
+}
 CIERRES_QA = frozenset({"Completado", "Caso manual"})
 TEXTO_PEDIR_CORREO = "pedir correo"
 
@@ -204,6 +221,168 @@ def registrar_peticion_repetida(mensaje_id, datos, estado_referencia):
     return estado
 
 
+def llave_correo(valor):
+    if falta_correo_peticionario(valor):
+        return ""
+    _, email = parseaddr(str(valor or ""))
+    candidato = (email or str(valor or "")).strip().lower()
+    ignorados = {CORREO_HUB, *CORREOS_REVISION_MANUAL}
+    _, respuesta = parseaddr(GMAIL_REPLY_TO or "")
+    if respuesta:
+        ignorados.add(respuesta.strip().lower())
+    return "" if candidato in ignorados else candidato
+
+
+def llave_documento(valor):
+    digitos = re.sub(r"\D", "", str(valor or ""))
+    return digitos if len(digitos) >= 6 else ""
+
+
+def llave_telefono(valor):
+    digitos = re.sub(r"\D", "", str(valor or ""))
+    if len(digitos) > 10 and digitos.startswith("57"):
+        digitos = digitos[2:]
+    digitos = digitos[-10:]
+    return digitos if len(digitos) >= 7 else ""
+
+
+def fecha_de_texto(texto):
+    texto = " ".join(str(texto or "").strip().lower().split())
+    if not texto:
+        return None
+    try:
+        return datetime.fromisoformat(texto).date()
+    except ValueError:
+        pass
+    hallado = re.fullmatch(r"(\d{1,2})/(\d{1,2})/(\d{4})", texto)
+    if hallado:
+        dia, mes, anio = (int(parte) for parte in hallado.groups())
+    else:
+        hallado = re.fullmatch(r"(\d{1,2}) de ([a-záéíóú]+) de (\d{4})", texto)
+        if not hallado or hallado.group(2) not in MESES_FECHA:
+            return None
+        dia, mes, anio = int(hallado.group(1)), MESES_FECHA[hallado.group(2)], int(hallado.group(3))
+    try:
+        return date(anio, mes, dia)
+    except ValueError:
+        return None
+
+
+def _llaves_caso(correo):
+    correo = correo or {}
+    return (
+        llave_correo(correo.get("correo_peticionario")),
+        llave_documento(correo.get("numero_documento")),
+        llave_telefono(correo.get("telefono")),
+        str(correo.get("id_rt") or "").strip(),
+    )
+
+
+def _fuera_de_ventana(fecha, hoy):
+    return fecha is not None and fecha < hoy - timedelta(days=VENTANA_PETICION_REPETIDA_DIAS)
+
+
+def _sigue_flujo_normal(nuevo, previo, estado_previo):
+    _correo, doc, tel, id_rt = nuevo
+    _correo_previo, doc_previo, tel_previo, id_previo = previo
+    if id_rt and id_previo and id_rt != id_previo:
+        return True
+    if doc and doc_previo and doc != doc_previo:
+        return True
+    if estado_previo in ESTADOS_SIN_CUENTA and (
+        (id_rt and not id_previo)
+        or (doc and not doc_previo)
+        or (tel and not tel_previo)
+    ):
+        return True
+    return False
+
+
+def leer_filas_sheet_rt():
+    return leer_rango(SHEETS_ID, "A:G")
+
+
+def buscar_peticion_previa(correo, gmail_id, thread_id="", filas_sheet=None, ids_ronda=(), hoy=None):
+    from app import registro
+
+    hoy = hoy or date.today()
+    nuevo = _llaves_caso(correo)
+    correo_nuevo, doc, tel, _id_rt = nuevo
+    if not (correo_nuevo or doc or tel):
+        return None
+    gmail_id = str(gmail_id or "").strip()
+    thread_id = str(thread_id or "").strip()
+
+    for mensaje_id, estado, datos in registro.listar_casos_rt_para_cruce(
+        ESTADOS_CRUCE_PETICIONARIO, ids_ronda
+    ):
+        datos_correo = datos.get("correo") or {}
+        if mensaje_id == gmail_id:
+            continue
+        if thread_id and str(datos_correo.get("thread_id_gmail") or "").strip() == thread_id:
+            continue
+        if estado in ESTADOS_PETICION_REPETIDA:
+            continue
+        lupe = datos.get("lupe") or {}
+        previo = list(_llaves_caso(datos_correo))
+        previo[3] = str(lupe.get("id") or previo[3] or "").strip()
+        previo = tuple(previo)
+        if correo_nuevo and correo_nuevo == previo[0]:
+            llave = "correo"
+        elif doc and doc == previo[1]:
+            llave = "documento"
+        elif tel and tel == previo[2]:
+            llave = "teléfono"
+        else:
+            continue
+        creado = None
+        try:
+            creado = datetime.fromisoformat(str(datos.get("creado") or "")).date()
+        except ValueError:
+            creado = fecha_de_texto(datos_correo.get("fecha_recibido"))
+        if _fuera_de_ventana(creado, hoy):
+            continue
+        if _sigue_flujo_normal(nuevo, previo, estado):
+            continue
+        return {"mensaje_id": mensaje_id, "estado": estado, "origen": "db", "llave": llave}
+
+    if not correo_nuevo or not filas_sheet:
+        return None
+    locales = registro.listar_ids_casos_rt()
+    for fila in filas_sheet:
+        fila = list(fila) + [""] * (7 - len(fila))
+        mensaje_id = str(fila[6]).strip()
+        estado = str(fila[3]).strip()
+        if not mensaje_id or mensaje_id == gmail_id or mensaje_id in locales:
+            continue
+        if estado not in ESTADOS_CRUCE_PETICIONARIO:
+            continue
+        if llave_correo(fila[1]) != correo_nuevo:
+            continue
+        if _fuera_de_ventana(fecha_de_texto(fila[4]), hoy):
+            continue
+        previo = (correo_nuevo, "", "", str(fila[2]).strip())
+        if _sigue_flujo_normal((correo_nuevo, "", "", nuevo[3]), previo, estado):
+            continue
+        return {"mensaje_id": mensaje_id, "estado": estado, "origen": "sheet", "llave": "correo"}
+    return None
+
+
+def registrar_peticion_revisar(mensaje_id, datos, referencia):
+    from app import registro
+
+    correo = datos.setdefault("correo", {})
+    correo["gmail_id"] = correo.get("gmail_id") or mensaje_id
+    datos.setdefault("lupe", {})["regla_bloqueo"] = ""
+    datos.setdefault("slack", {})["thread_id"] = ""
+    datos["completado"] = False
+    datos["peticion_previa"] = dict(referencia or {})
+    estado = ESTADO_PETICION_REPETIDA_REVISAR
+    registro.guardar_caso_rt(datos, estado)
+    _actualizar_sheet_peticion_repetida(datos, estado)
+    return estado
+
+
 def _fila_peticion_repetida(datos, estado):
     correo = datos.get("correo") or {}
     nombre = (
@@ -333,4 +512,4 @@ def cambiar_etiquetas(mensaje_id, agregar=(), quitar=(), servicio=None):
 def leer_mapeo_causales():
     if not RUTA_MAPEO.is_file():
         raise FileNotFoundError("Falta data-json/mapeo-causales.json")
-    return json.loads(RUTA_MAPEO.read_text(encoding="utf-8"))
+    return json.loads(RUTA_MAPEO.read_text(encoding="utf-8"))

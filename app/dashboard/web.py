@@ -29,6 +29,7 @@ _ORDEN_RT = (
     "Petición repetida - caso gestionado",
     "En Slack - pendiente",
     "Petición repetida - caso pendiente",
+    "Petición repetida - revisar",
     "Nuevo",
     "Caso manual",
     "Sin cuenta",
@@ -52,6 +53,7 @@ _ATENCION_RT = {
     "en slack - pendiente",
     "nuevo",
     "caso manual",
+    "petición repetida - revisar",
 }
 _ATENCION_ENTES = {
     "error de envío - reintento 1",

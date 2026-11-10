@@ -109,6 +109,15 @@ CORREOS_REVISION_MANUAL = tuple(
     for correo in os.getenv("CORREOS_REVISION_MANUAL", "").split(",")
     if correo.strip()
 )
+DOMINIOS_REVISION_MANUAL = tuple(dict.fromkeys(
+    dominio.strip().lower().lstrip("@.")
+    for dominio in (
+        "fiscalia.gov.co,policia.gov.co,ramajudicial.gov.co,"
+        + os.getenv("DOMINIOS_REVISION_MANUAL", "")
+    ).split(",")
+    if dominio.strip().lstrip("@.")
+))
+VENTANA_PETICION_REPETIDA_DIAS = _numero_env("VENTANA_PETICION_REPETIDA_DIAS", "60")
 CONTROL_CALIDAD = os.getenv("CONTROL_CALIDAD", "false").lower() == "true"
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 
@@ -130,4 +139,4 @@ ALERTAS_CANALES = [
     if canal.strip()
 ]
 ALERTAS_EMAIL = os.getenv("ALERTAS_EMAIL", "")
-ALERTAS_SLACK_CANAL = os.getenv("ALERTAS_SLACK_CANAL", "")
+ALERTAS_SLACK_CANAL = os.getenv("ALERTAS_SLACK_CANAL", "")

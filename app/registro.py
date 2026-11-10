@@ -142,7 +142,8 @@ def listar_casos_rt_abiertos():
         "WHERE estado NOT IN ("
         "'Completado', 'Caso manual', 'Sin cuenta - enviado', "
         "'Petición repetida - caso gestionado', "
-        "'Petición repetida - caso pendiente')"
+        "'Petición repetida - caso pendiente', "
+        "'Petición repetida - revisar')"
     )
 
 
@@ -182,6 +183,35 @@ def buscar_duplicado_rt(id_rt):
         return None
     fila = filas[0]
     return fila["mensaje_id"], fila["estado"], fila["regla_bloqueo"]
+
+
+def listar_casos_rt_para_cruce(estados, incluir_ids=()):
+    estados = list(estados or ())
+    incluir_ids = list(incluir_ids or ())
+    condiciones = []
+    if estados:
+        condiciones.append(f"estado IN ({', '.join('?' for _ in estados)})")
+    if incluir_ids:
+        condiciones.append(f"mensaje_id IN ({', '.join('?' for _ in incluir_ids)})")
+    if not condiciones:
+        return []
+    filas = _consultar(
+        "SELECT mensaje_id, estado, datos FROM casos_rt WHERE " + " OR ".join(condiciones),
+        (*estados, *incluir_ids),
+    )
+    casos = []
+    for fila in filas:
+        try:
+            datos = json.loads(fila["datos"])
+        except (TypeError, ValueError):
+            continue
+        datos["estado"] = fila["estado"]
+        casos.append((fila["mensaje_id"], fila["estado"], datos))
+    return casos
+
+
+def listar_ids_casos_rt():
+    return {fila["mensaje_id"] for fila in _consultar("SELECT mensaje_id FROM casos_rt")}
 
 
 def anotar_duplicado_rt(mensaje_id, datos_correo):

@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 import storage
@@ -15,12 +16,12 @@ from clasificar_correos_gmail import (
     CONFIANZA_MINIMA,
     LABEL_MANUAL,
     LABEL_RT,
-    _es_consulta_mismo_caso,
     _es_cuenta_desactivada_o_eliminada,
     _es_recepcion_hub,
     _es_reclamo_aliado_operativo,
     _obtener_peticionario,
     _rt_sin_cola_operativa,
+    razon_revision_fija,
 )
 from agentes.agente_clasificador import clasificar_correo
 from entes.correo import _fecha_peticion
@@ -42,17 +43,13 @@ _NO_RT = {
     "vuelo",
     "reclamo_aliado",
 }
-MESES_ES = [
-    "enero", "febrero", "marzo", "abril", "mayo", "junio",
-    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
-]
 
 
-def _fecha_en_espanol(iso):
+def _fecha_ddmmaaaa(iso):
     if not iso:
         return "Sin fecha"
     anio, mes, dia = (int(parte) for parte in iso.split("-"))
-    return f"{dia} de {MESES_ES[mes - 1]} de {anio}"
+    return f"{dia:02d}/{mes:02d}/{anio}"
 
 
 def _truncar(texto, max_len=100):
@@ -62,11 +59,12 @@ def _truncar(texto, max_len=100):
     return texto[: max_len - 1].rstrip() + "…"
 
 
-def _es_rt_operable(asunto, cuerpo, adjuntos=""):
+def _es_rt_operable(asunto, cuerpo, adjuntos="", remitente=""):
     """False solo ante un falso positivo claro. Si la IA falla o duda, sigue como RT."""
     texto = f"{asunto}\n{cuerpo}\n{adjuntos}"
-    if _es_consulta_mismo_caso(texto):
-        return False, "coordinación mismo caso — revisión manual"
+    razon_fija = razon_revision_fija(asunto, cuerpo, remitente)
+    if razon_fija:
+        return False, razon_fija
     if _es_cuenta_desactivada_o_eliminada(texto):
         return False, "cuenta desactivada o eliminada — revisión manual"
     if _es_reclamo_aliado_operativo(texto):
@@ -116,6 +114,54 @@ def _recordar_caso(nombre_archivo, vistos):
     if referencia:
         id_rt, estado, regla = referencia
         vistos[id_rt] = (nombre_archivo, estado, regla)
+
+
+def _filas_sheet(estado_sheet):
+    if not estado_sheet["leido"]:
+        estado_sheet["leido"] = True
+        try:
+            estado_sheet["filas"] = storage.leer_filas_sheet_rt()
+        except Exception as error:
+            estado_sheet["filas"] = None
+            log.warning(
+                "No se pudo leer el Sheet para cruzar peticionarios; se usa solo la base local: %s",
+                error,
+            )
+            alertar(
+                "rt_sheet",
+                "Paso RT sin lectura del Sheet",
+                f"{resumir_error(error)}. El cruce de peticionarios usa solo la base local en esta ronda.",
+            )
+    return estado_sheet["filas"]
+
+
+def _registrado_por_otro_equipo(gmail_id, estado_sheet):
+    filas = _filas_sheet(estado_sheet)
+    if not filas:
+        return False
+    if not any(len(fila) > 6 and str(fila[6]).strip() == gmail_id for fila in filas):
+        return False
+    try:
+        storage.leer_caso(gmail_id)
+    except FileNotFoundError:
+        return True
+    except Exception:
+        return False
+    return False
+
+
+def _buscar_peticion_previa(datos, gmail_id, thread_id, estado_sheet, ids_ronda):
+    try:
+        return storage.buscar_peticion_previa(
+            datos["correo"],
+            gmail_id,
+            thread_id,
+            filas_sheet=_filas_sheet(estado_sheet),
+            ids_ronda=ids_ronda,
+        )
+    except Exception as error:
+        log.warning("No se pudo cruzar el peticionario; sigue el flujo normal: %s", error)
+        return None
 
 
 def _anotar_duplicado(nombre_referencia, datos_correo):
@@ -189,6 +235,8 @@ def _procesar_cola(lupe):
         "pausa_ia": 0,
     }
     duplicados_vistos = {}
+    estado_sheet = {"leido": False, "filas": None}
+    ids_ronda = set()
     if not mensajes:
         resumen(log, **contadores)
         return 0
@@ -244,7 +292,7 @@ def _procesar_cola(lupe):
             errores += 1
             log_caso(log, remitente_email).error("No se pudo leer el contenido del correo; queda sin leer: %s", error)
             continue
-        fecha = _fecha_en_espanol(_fecha_peticion(cuerpo, fecha_raw))
+        fecha = _fecha_ddmmaaaa(_fecha_peticion(cuerpo, fecha_raw))
 
         _, correo_peticionario = _obtener_peticionario(
             remitente, f"{cuerpo}\n{adjuntos}"
@@ -257,10 +305,18 @@ def _procesar_cola(lupe):
                 correo_peticionario,
             )
             continue
-        es_rt, razon = _es_rt_operable(asunto, cuerpo, adjuntos)
+        es_rt, razon = _es_rt_operable(asunto, cuerpo, adjuntos, remitente_email)
         if not es_rt:
             _enviar_a_revision_manual(
                 servicio, mensaje["id"], razon, correo_peticionario
+            )
+            continue
+        if _registrado_por_otro_equipo(mensaje["id"], estado_sheet):
+            _enviar_a_revision_manual(
+                servicio,
+                mensaje["id"],
+                "ya registrado en el Sheet por otro equipo — revisión manual",
+                correo_peticionario,
             )
             continue
 
@@ -292,6 +348,7 @@ def _procesar_cola(lupe):
 
         datos = {
             "completado": False,
+            "creado": datetime.now().isoformat(timespec="seconds"),
             "correo": {
                 "asunto": asunto,
                 "correo_rt": resultado_ia.get("correo_rt", ""),
@@ -349,12 +406,41 @@ def _procesar_cola(lupe):
             contadores["duplicados"] += 1
             continue
 
+        previa = _buscar_peticion_previa(
+            datos, mensaje["id"], thread_id_gmail, estado_sheet, ids_ronda
+        )
+        if previa:
+            mensaje_id = mensaje["id"]
+            datos["correo"]["gmail_id"] = mensaje_id
+            try:
+                storage.registrar_peticion_revisar(mensaje_id, datos, previa)
+            except Exception as error:
+                errores += 1
+                log_caso(log, correo_peticionario or mensaje_id).error(
+                    "Petición repetida del peticionario: no se pudo registrar en Sheet; el correo sigue sin leer: %s",
+                    error,
+                )
+                continue
+            if previa["origen"] == "db":
+                try:
+                    _anotar_duplicado(previa["mensaje_id"], datos["correo"])
+                except Exception as error:
+                    log.warning("No se pudo anotar la petición en el caso %s: %s", previa["mensaje_id"], error)
+            _enviar_a_revision_manual(
+                servicio,
+                mensaje_id,
+                f"petición repetida por {previa['llave']} (caso {previa['mensaje_id']}, {previa['estado']}) — revisión manual",
+                correo_peticionario,
+            )
+            continue
+
         mensaje_id = mensaje["id"]
         correo_para_nombre = resultado_ia.get("correo_peticionario") or resultado_ia.get("correo_rt") or remitente_email
         datos["correo"]["gmail_id"] = mensaje_id
 
         page = lupe.pagina()
         storage.guardar_caso(mensaje_id, datos)
+        ids_ronda.add(mensaje_id)
 
         if datos["correo"].get("id_rt"):
             search_by = "ID RT"

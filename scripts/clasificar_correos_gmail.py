@@ -14,6 +14,7 @@ from gmail_cuerpo import extraer_contenido
 from flow_control import DetenerFlujo, comprobar_detener
 from config import (
     CORREOS_REVISION_MANUAL,
+    DOMINIOS_REVISION_MANUAL,
     GMAIL_LABEL_ELIMINAR_DEUDA_RTS,
     GMAIL_LABEL_ENTES,
     GMAIL_LABEL_FACTURACION,
@@ -128,37 +129,125 @@ _REENVIO = re.compile(
     r"(?im)^\s*(?:[-\s]*forwarded message[-\s]*|mensaje reenviado)\s*$"
 )
 
+_CORTE_CABECERA = re.compile(
+    r"(?im)"
+    r"-{2,}\s*(?:forwarded message|mensaje reenviado|original message|mensaje original)\s*-{2,}"
+    r"|^\s*(?:forwarded message|mensaje reenviado)\s*$"
+    r"|(?:inicio del mensaje reenviado|begin forwarded message)\s*:"
+    r"|\b(?:de|from)\s*:[^\n]{0,250}?\b(?:enviado(?:\s+el)?|sent|fecha|date)\s*:"
+    r"|^\s*(?:de|from)\s*:[^\n]*\n\s*(?:enviado(?:\s+el)?|sent|fecha|date)\s*:"
+    r"|\b(?:escribio|wrote)\s*:"
+    r"|^\s*>"
+)
+_PREFIJO_REENVIO_ASUNTO = re.compile(r"^\s*(?:(?:fwd?|rv|re|tr|reenviar|reenviado)\s*:\s*)+")
+_CASO = (
+    r"(?:casit[oa]s?|casos?(?:\s+rt)?|solicitud(?:es)?|peticion(?:es)?|tickets?"
+    r"|radicados?|requerimientos?|reclamos?|temas?|gestion(?:es)?)"
+)
+_FRASES_CUALQUIER_REMITENTE = tuple(re.compile(p) for p in (
+    rf"\bmism[oa]s?\s+{_CASO}\b",
+    rf"\b{_CASO}\s+(?:\w+\s+){{0,2}}?(?:repetid[oa]s?|duplicad[oa]s?)\b",
+    r"\b(?:es|esta|seria|sera|parece)\s+(?:un\s+|una\s+)?(?:repetid[oa]|duplicad[oa])\b",
+    r"\bdoble\s+gestion\b",
+    r"\b(?:confirmar|confirmame|validar|verificar)\b.{0,80}?\bmism[oa]\s+(?:correo|peticion)\b",
+))
+_FRASES_INTERNAS = tuple(re.compile(p) for p in (
+    r"\b(?:es|seria|sera|corresponde\s+a|corresponde\s+al|si\s+es)\s+(?:el\s+|la\s+|lo\s+)?mism[oa]\b",
+    r"\bes\s+igual\s+al?\s+anterior\b",
+    r"\bes\s+(?:el|la)\s+que\s+ya\s+teniamos\b",
+    r"\b(?:repetid[oa]s?|duplicad[oa]s?)\b",
+    r"\bya\s+(?:(?:se|lo|la|le|fue|esta|en)\s+){0,3}(?:gestion\w*|trabaj\w*|respond\w*|respondi\w*)",
+    r"\bya\s+lo\s+(?:tienes|tenemos|tengo)\b",
+    rf"\b(?:tienes|tenemos|existe|hay)\s+(?:(?:ya|un|una|el|la|este|esta|algun|alguna|abierto)\s+){{0,3}}{_CASO}\b",
+    r"\b(?:me\s+indicas|me\s+indica|me\s+confirmas|me\s+confirma|me\s+validas"
+    r"|me\s+ayudas\s+a\s+validar|me\s+ayudas\s+a\s+revisar|puedes\s+revisar|podrias\s+revisar)\s+si\b"
+    r".{0,150}?\b(?:mism[oa]s?|gestionad[oa]s?|repetid[oa]s?|duplicad[oa]s?)",
+    r"\bignor(?:a|alo|ala|ar|en)\b",
+    r"\bno\s+(?:lo|la|los|las)\s+gestion\w*",
+    rf"\b(?:un|una|otro|otra)\s+{_CASO}\s+(?:diferente|distint[oa]|nuev[oa])\b",
+    rf"\b{_CASO}\s+(?:diferente|distint[oa])\b",
+    rf"\bes\s+otr[oa]\s+{_CASO}\b",
+    r"\bno\s+es\s+(?:el|la)\s+mism[oa]\b",
+    r"\bpuedes\s+(?:avanzar|gestionar\w*|proceder|continuar)\b",
+    r"\bgestional[oa]s?\b",
+    r"\bdale\b",
+    r"\bproced[ae]\b",
+))
 
-def _texto_cabecera(texto, max_len=800):
+
+def _normalizar_texto(texto):
+    t = normalize("NFD", str(texto or "").lower())
+    t = re.sub(r"[\u0300-\u036f]", "", t)
+    return re.sub(r"[^\w@.\n>:-]+", " ", t)
+
+
+def _texto_cabecera(texto, max_len=1500):
     """Tramo antes del reenvío (o inicio del correo) para coordinación entre revisores."""
-    bloques = _REENVIO.split(str(texto or ""))
-    cabecera = (bloques[0] if bloques else "").strip()
-    return " ".join(cabecera.lower().split())[:max_len]
+    t = _normalizar_texto(texto)
+    corte = _CORTE_CABECERA.search(t)
+    cabecera = t[: corte.start()] if corte else t
+    return " ".join(cabecera.split())[:max_len]
 
 
-def _es_consulta_mismo_caso(texto):
+def _correo_de(valor):
+    _, email = parseaddr(str(valor or ""))
+    return (email or str(valor or "")).strip().lower()
+
+
+def _es_remitente_interno(remitente):
+    return _correo_de(remitente).endswith("@rappi.com")
+
+
+def _es_consulta_mismo_caso(texto, remitente="", asunto=None):
     """Colega pide confirmar si el reenvío es el mismo caso en gestión."""
-    t = _texto_cabecera(texto)
-    if not t:
+    if asunto is None:
+        cuerpo = str(texto or "")
+        primera, _, resto = cuerpo.partition("\n")
+    else:
+        primera, resto = str(asunto or ""), str(texto or "")
+    cabecera = _texto_cabecera(f"{primera}\n{resto}")
+    if cabecera and any(p.search(cabecera) for p in _FRASES_CUALQUIER_REMITENTE):
+        return True
+    if not _es_remitente_interno(remitente):
         return False
-    if re.search(
-        r"mismo\s+caso.*(?:gestion|gestiona|gestionando|ya\s+se)",
-        t,
-    ):
+    asunto_propio = "" if _PREFIJO_REENVIO_ASUNTO.match(_normalizar_texto(primera)) else primera
+    propio = _texto_cabecera(f"{asunto_propio}\n{resto}")
+    return bool(propio) and any(p.search(propio) for p in _FRASES_INTERNAS)
+
+
+_LINEA_REMITENTE = re.compile(
+    r"(?i)\b(?:de|from)\s*:\s*[^\n<>@]{0,120}?<?\s*([\w.+-]+@[\w-]+(?:\.[\w-]+)+)"
+)
+
+
+def _dominio_revision_manual(correo):
+    email = _correo_de(correo)
+    if "@" not in email:
+        return ""
+    dominio = email.rsplit("@", 1)[1].strip(".")
+    for base in DOMINIOS_REVISION_MANUAL:
+        if dominio == base or dominio.endswith("." + base):
+            return base
+    return ""
+
+
+def _es_autoridad(remitente, cuerpo=""):
+    if _dominio_revision_manual(remitente):
         return True
-    if re.search(
-        r"(?:confirmar|conf[ií]rmame|validar|verificar).{0,80}"
-        r"(?:mismo\s+caso|misma\s+petici[oó]n|mismo\s+correo)",
-        t,
-    ):
-        return True
-    if re.search(r"se\s+trata\s+del\s+mismo\s+caso", t):
-        return True
-    if re.search(r"si\s+es\s+el\s+mismo\s+caso", t):
-        return True
-    if re.search(r"(?:caso|gesti[oó]n).{0,40}(?:duplicad|doble\s+gesti)", t):
-        return True
-    return False
+    if not _es_remitente_interno(remitente):
+        return False
+    return any(
+        _dominio_revision_manual(hallado)
+        for hallado in _LINEA_REMITENTE.findall(str(cuerpo or ""))
+    )
+
+
+def razon_revision_fija(asunto, cuerpo, remitente=""):
+    if _es_autoridad(remitente, cuerpo):
+        return "entidad judicial o autoridad — revisión manual"
+    if _es_consulta_mismo_caso(cuerpo, remitente, asunto=asunto):
+        return "coordinación mismo caso — revisión manual"
+    return ""
 
 
 def _es_reclamo_aliado_operativo(texto):
@@ -289,11 +378,11 @@ def _tiene_telefono_extranjero(texto):
     return False
 
 
-def _decidir_etiqueta(resultado, texto=""):
+def _decidir_etiqueta(resultado, texto="", remitente=""):
     categorias = resultado.get("categorias", [])
     confianza  = resultado.get("confianza", 0)
 
-    if _es_consulta_mismo_caso(texto):
+    if _es_consulta_mismo_caso(texto, remitente):
         return LABEL_MANUAL, "coordinación mismo caso — revisión manual"
 
     if _es_cuenta_desactivada_o_eliminada(texto):
@@ -431,12 +520,25 @@ def clasificar_correos():
                 _marcar_revision_manual(servicio, mensaje["id"])
                 continue
 
+            razon_fija = razon_revision_fija(asunto, cuerpo, remitente)
+            if razon_fija:
+                _imprimir_clasificacion(
+                    correo_peticionario,
+                    "",
+                    [],
+                    LABEL_MANUAL,
+                    0,
+                    razon_fija,
+                )
+                _marcar_revision_manual(servicio, mensaje["id"])
+                continue
+
             etiqueta = None
             try:
                 resultado_ia = clasificar_correo(asunto, cuerpo, adjuntos=adjuntos)
                 categorias = resultado_ia.get('categorias', [])
                 etiqueta, razon = _decidir_etiqueta(
-                    resultado_ia, f"{asunto}\n{cuerpo}\n{adjuntos}"
+                    resultado_ia, f"{asunto}\n{cuerpo}\n{adjuntos}", remitente
                 )
             except Exception as error:
                 log_caso(log, correo_peticionario).warning("IA no disponible: %s", error)

@@ -35,7 +35,7 @@ Responde SOLO con un JSON con esta estructura:
     "nombre_peticionario": "Nombre o apodo de quien envió el Gmail.",
     "nombre_rt": "Nombre del rappitendero en el cuerpo o PDF, cuya cuenta se pide.",
     "numero_documento": "Cédula del rappitendero del cuerpo o PDF; si no, vacío.",
-    "id_rt": "Identificador numérico de la cuenta RT, no teléfono, cédula, IMEI ni tarjeta.",
+    "id_rt": "Identificador numérico de la cuenta RT, tomado del asunto, del cuerpo o del PDF; no teléfono, cédula, IMEI, tarjeta, pedido ni orden.",
     "telefono": "Teléfono del rappitendero si aparece; no confundir con datos técnicos.",
     "tipo_representacion": "rt"
 }}
@@ -43,7 +43,8 @@ Responde SOLO con un JSON con esta estructura:
 Reglas:
 - En correos reenviados, el peticionario es quien aparece en From: del mensaje reenviado.
 - La petición debe ser breve (máx. 120 caracteres): acción concreta del rappitendero, sin intro del intermediario.
-- nombre_rt, correo_rt, numero_documento, id_rt y telefono salen del cuerpo o del PDF: son del rappitendero cuya cuenta se pide. Nunca copies ahí el apodo ni el Gmail de quien envió.
+- nombre_rt, correo_rt, numero_documento y telefono salen del cuerpo o del PDF; id_rt también puede salir del asunto. Son del rappitendero cuya cuenta se pide. Nunca copies ahí el apodo ni el Gmail de quien envió.
+- Para id_rt, toma solo los dígitos que siguen a id, ID, id:, id cuenta, id RT, ID Soy Rappi o identificador de repartidor, aunque vengan pegados a otra palabra o signo. Ejemplos: "id 1607441cuenta" -> 1607441; "ID:404811." -> 404811. No uses números precedidos de cédula, CC, PPT, teléfono, pedido u orden. Si el asunto y el cuerpo traen IDs distintos, usa el del cuerpo o PDF.
 - Si el escrito nombra a una persona (por ejemplo Hugo) y el From es otra (por ejemplo Yisel), nombre_rt es Hugo.
 - Si el From y el cuerpo son la misma persona, nombre_rt puede ser ese nombre.
 - tipo_representacion es rt_rl solo si el escrito dice que quien pide es una firma, un abogado o un representante legal acreditado. Un Gmail de intermediario o un apodo no lo vuelve rt_rl.
