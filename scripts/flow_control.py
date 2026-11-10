@@ -1,6 +1,7 @@
-"""Detención cooperativa de pasos largos (clasificar, Lupe, Slack)."""
+"""Detención cooperativa de pasos largos (clasificar, Lupe, Slack) y salida sin red."""
 
 import logging
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -32,3 +33,13 @@ def comprobar_detener(
         limpiar_detener()
         logging.getLogger("proyecto_e").warning("Parada solicitada: %s", mensaje)
         raise DetenerFlujo(mensaje)
+
+
+def salir_por_red(error) -> None:
+    """Termina el paso con el código 22: sin conexión, los correos quedan como estaban."""
+    from utils.exceptions import SinRed
+    from utils.logger import obtener_log, resumir_error
+
+    sin_red = SinRed(details=resumir_error(error))
+    obtener_log().warning("%s; los correos siguen pendientes para el próximo ciclo", sin_red)
+    sys.exit(sin_red.codigo)

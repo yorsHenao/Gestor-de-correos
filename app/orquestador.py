@@ -7,6 +7,7 @@ Códigos de salida de los pasos:
 - 20: Lupe pide login → alerta y se omiten los pasos que usan Lupe en este ciclo.
   Quedan en `logs/lupe_pendiente.json` y el scheduler los relanza al volver la sesión.
 - 21: Lupe ocupado → aviso; el paso se reintenta en el siguiente ciclo.
+- 22: sin conexión a Google/IA → aviso y alerta; el ciclo no sigue y los correos quedan pendientes.
 - otro: error → alerta.
 """
 
@@ -52,6 +53,7 @@ ETIQUETAS = {
 
 CODIGO_LOGIN = 20
 CODIGO_OCUPADO = 21
+CODIGO_RED = 22
 TIMEOUT_PASO_SEG = int(float(os.getenv("PASO_TIMEOUT_MIN") or "120") * 60)
 FLAG_PAUSA = RAIZ / "logs" / "servicio.pausado"
 FLAG_ESPERANDO = RAIZ / "logs" / "revision.esperando"
@@ -434,6 +436,25 @@ def _errores_en_salida(salida):
     return 0
 
 
+def _detalle_sin_red(nombre):
+    try:
+        from app.scheduler import proximo_ciclo
+
+        proximo = proximo_ciclo()
+    except Exception:
+        proximo = None
+    espera = (
+        f"espera el próximo ciclo automático ({proximo:%H:%M})"
+        if proximo
+        else "espera el próximo ciclo automático"
+    )
+    return (
+        f"El paso {_etiqueta(nombre)} no pudo conectarse. No se perdió nada: los correos "
+        "siguen pendientes. Cuando vuelva internet, pulsa «Ciclo completo» en el dashboard "
+        f"o {espera}."
+    )
+
+
 def _estado_por_codigo(nombre, codigo, salida):
     if codigo == 0:
         return "aviso" if _errores_en_salida(salida) > 0 else "ok"
@@ -448,6 +469,9 @@ def _estado_por_codigo(nombre, codigo, salida):
         return "aviso"
     if codigo == CODIGO_OCUPADO:
         log.warning("Lupe ocupado; %s se reintenta en el siguiente ciclo", nombre, **_extra(nombre))
+        return "aviso"
+    if codigo == CODIGO_RED:
+        alertar("sin_red", "Sin conexión a Google/IA", _detalle_sin_red(nombre))
         return "aviso"
     cola = "\n".join(salida.strip().splitlines()[-8:])
     alertar("paso_error", f"El paso {nombre} terminó con error (código {codigo})", cola)
@@ -544,10 +568,13 @@ def _ciclo(origen, pasos, eco, modo_automatico):
             _guardar_pendientes_lupe(
                 [nombre] + [paso for paso in pasos[indice + 1 :] if PASOS[paso]["lupe"]]
             )
-        elif PASOS[nombre]["lupe"] and resultado["codigo"] != CODIGO_OCUPADO:
+        elif PASOS[nombre]["lupe"] and resultado["codigo"] not in (CODIGO_OCUPADO, CODIGO_RED):
             _quitar_pendiente_lupe(nombre)
         if _GRAVEDAD[resultado["estado"]] > _GRAVEDAD[peor]:
             peor = resultado["estado"]
+        if resultado["codigo"] == CODIGO_RED:
+            log.warning("Sin conexión a Google/IA: el ciclo no sigue", **_extra(nombre))
+            break
         if _cortar_ciclo:
             log.warning("Paso detenido: el ciclo no sigue", **_extra())
             break

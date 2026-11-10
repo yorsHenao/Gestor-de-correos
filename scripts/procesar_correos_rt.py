@@ -26,7 +26,7 @@ from clasificar_correos_gmail import (
 from agentes.agente_clasificador import clasificar_correo
 from entes.correo import _fecha_peticion
 from gmail_cuerpo import extraer_contenido, mensaje_tiene_pdf_o_word
-from flow_control import DetenerFlujo, comprobar_detener
+from flow_control import DetenerFlujo, comprobar_detener, salir_por_red
 from lupe_navegador import SesionLupe, salir_por_lupe
 from utils.exceptions import LupeOcupado, LupeSesionRequerida, es_infraestructura
 from utils.logger import log_caso, obtener_log, resumen, resumir_error
@@ -199,6 +199,23 @@ def procesar_correos_rt():
         return _procesar_cola(lupe)
 
 
+def _pausar_ronda(contadores, total, error, caso):
+    """Corta la ronda por IA o red caída: el correo actual y los que siguen quedan sin leer."""
+    contadores["procesados"] -= 1
+    contadores["pausa_ia"] = total - contadores["procesados"]
+    detalle = resumir_error(error)
+    log_caso(log, caso).warning(
+        "Paso RT en pausa por infraestructura; %d correo(s) siguen sin leer: %s",
+        contadores["pausa_ia"],
+        detalle,
+    )
+    alertar(
+        "rt_infra",
+        "Paso RT pausado por infraestructura",
+        f"{detalle}. Los correos se reintentarán en la siguiente ronda.",
+    )
+
+
 def _procesar_cola(lupe):
     try:
         storage.sincronizar_cierres_qa()
@@ -256,6 +273,9 @@ def _procesar_cola(lupe):
                 .execute()
             )
         except Exception as error:
+            if es_infraestructura(error):
+                _pausar_ronda(contadores, len(mensajes), error, mensaje["id"])
+                break
             errores += 1
             log.error("No se pudo leer el correo %s; queda sin leer para la siguiente ronda: %s", mensaje["id"], error)
             continue
@@ -289,6 +309,9 @@ def _procesar_cola(lupe):
                 msg, servicio, incluir_adjuntos=mensaje_tiene_pdf_o_word(msg)
             )
         except Exception as error:
+            if es_infraestructura(error):
+                _pausar_ronda(contadores, len(mensajes), error, remitente_email)
+                break
             errores += 1
             log_caso(log, remitente_email).error("No se pudo leer el contenido del correo; queda sin leer: %s", error)
             continue
@@ -326,18 +349,8 @@ def _procesar_cola(lupe):
             resultado_ia = extractor.extraer(asunto, texto_extraer)
         except Exception as error:
             if es_infraestructura(error):
-                contadores["procesados"] -= 1
-                contadores["pausa_ia"] = len(mensajes) - contadores["procesados"]
-                detalle = resumir_error(error)
-                log_caso(log, correo_peticionario or remitente_email).warning(
-                    "Paso RT en pausa por la IA; %d correo(s) siguen sin leer: %s",
-                    contadores["pausa_ia"],
-                    detalle,
-                )
-                alertar(
-                    "rt_infra",
-                    "Paso RT pausado por la IA",
-                    f"{detalle}. Los correos se reintentarán en la siguiente ronda.",
+                _pausar_ronda(
+                    contadores, len(mensajes), error, correo_peticionario or remitente_email
                 )
                 break
             errores += 1
@@ -506,3 +519,7 @@ if __name__ == "__main__":
         pass
     except (LupeSesionRequerida, LupeOcupado) as error:
         salir_por_lupe(error)
+    except Exception as error:
+        if es_infraestructura(error):
+            salir_por_red(error)
+        raise

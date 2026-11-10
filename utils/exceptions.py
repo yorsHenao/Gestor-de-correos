@@ -1,5 +1,48 @@
 #excepciones personalizadas para el proyecto.
 
+import socket
+
+try:
+    from httplib2 import ServerNotFoundError
+except ImportError:
+    ServerNotFoundError = None
+try:
+    from requests import ConnectionError as RequestsConnectionError, Timeout as RequestsTimeout
+except ImportError:
+    RequestsConnectionError = RequestsTimeout = None
+
+CODIGO_RED = 22
+
+_TIPOS_RED = tuple(
+    tipo
+    for tipo in (
+        ServerNotFoundError,
+        socket.gaierror,
+        ConnectionError,
+        TimeoutError,
+        RequestsConnectionError,
+        RequestsTimeout,
+    )
+    if tipo is not None
+)
+
+_MARCAS_RED = (
+    "connection reset",
+    "connection aborted",
+    "connection refused",
+    "remote end closed",
+    "temporarily unavailable",
+    "timed out",
+    "timeout",
+    "name resolution",
+    "network is unreachable",
+    "unable to find the server",
+    "getaddrinfo failed",
+    "failed to establish a new connection",
+    "max retries exceeded",
+)
+
+
 class AgentError(Exception):
     """Excepción base para todos los errores de agentes en el proyecto."""
     def __init__(self, message="Error en la ejecución del agente", details=None):
@@ -36,9 +79,31 @@ class ErrorInfraestructura(AgentError):
         super().__init__(message, details)
 
 
+class SinRed(ErrorInfraestructura):
+    """No hay conexión con Google o la IA; el paso sale sin tocar los correos."""
+    codigo = CODIGO_RED
+
+    def __init__(self, message="Sin conexión a Google/IA", details=None):
+        super().__init__(message, details)
+
+
 def es_infraestructura(error):
-    """Reconoce caídas transitorias de IA, navegador y servicios de Google."""
+    """Reconoce caídas transitorias de IA, red, navegador y servicios de Google."""
+    for _ in range(4):
+        if error is None:
+            return False
+        if _es_infraestructura_directa(error):
+            return True
+        if not isinstance(error, BaseException):
+            return False
+        error = error.__cause__ or (None if error.__suppress_context__ else error.__context__)
+    return False
+
+
+def _es_infraestructura_directa(error):
     if isinstance(error, (ErrorInfraestructura, LupeSesionRequerida, LupeOcupado)):
+        return True
+    if isinstance(error, _TIPOS_RED):
         return True
     texto = str(error or "")
     bajo = texto.lower()
@@ -56,20 +121,7 @@ def es_infraestructura(error):
     estado = getattr(getattr(error, "resp", None), "status", 0)
     if estado == 429 or estado >= 500:
         return True
-    return any(
-        marca in bajo
-        for marca in (
-            "connection reset",
-            "connection aborted",
-            "connection refused",
-            "remote end closed",
-            "temporarily unavailable",
-            "timed out",
-            "timeout",
-            "name resolution",
-            "network is unreachable",
-        )
-    )
+    return any(marca in bajo for marca in _MARCAS_RED)
 
 
 class ClassificationError(AgentError):

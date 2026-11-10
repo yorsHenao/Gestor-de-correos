@@ -647,6 +647,7 @@ Se crea automáticamente en el primer arranque (no requiere migraciones manuales
 | `3` | Servicio ya en ejecución | `python main.py servicio` sale inmediatamente si detecta otro servicio activo (`data/servicio.lock`). |
 | `20` | **Lupe requiere iniciar sesión** | Emite alerta `lupe_login` y omite los demás pasos que usan Lupe durante ese ciclo. Quedan en `logs/lupe_pendiente.json` y se reanudan solos (en menos de 30 s) cuando la sesión vuelve a estar vigente, con el botón del dashboard o con `python main.py login`. |
 | `21` | **Perfil de Lupe ocupado** | Registra aviso `lupe_ocupado` y reintenta el paso en el siguiente ciclo. |
+| `22` | **Sin conexión a Google/IA** | Emite alerta `sin_red` y corta el ciclo. Los correos quedan sin leer y en su cola; se retoman con **Ciclo completo** en el dashboard o en el próximo ciclo automático. |
 | `!= 0` | Error en el paso | Emite alerta `paso_error` con las últimas líneas de salida del proceso. |
 
 ---
@@ -666,5 +667,6 @@ Se crea automáticamente en el primer arranque (no requiere migraciones manuales
 | **`Variables críticas faltantes en el .env`** | Falta alguna de las 5 variables obligatorias o ambas claves de IA. | Verifica en `.env` que estén definidas `DRIVE_SHEETS_ID`, `DRIVE_RESPONSES_FOLDER`, `GMAIL_LABEL_ID`, `GMAIL_REPLY_TO`, `SLACK_REVIEW_CHANNEL_ID` y al menos `GROQ_API_KEY` o `GEMINI_API_KEY`. |
 | **Alerta: «Lupe pide iniciar sesión» (código `20`)** | Expiró la sesión de Google dentro del perfil de Chromium de Lupe. | Pulsa **Iniciar sesión en Lupe** en el Dashboard (o ejecuta `python main.py login` en una terminal) y completa el acceso con Google en la ventana que se abre en el PC del servicio. Si el botón avisa que Lupe está en uso, espera a que termine el ciclo o paso. |
 | **`Google pide autorizar de nuevo` en pasos automáticos** | El archivo `data-json/token.json` fue revocado o expiró sin poder renovarse en segundo plano. | Ejecuta `python main.py paso clasificar` o `python scripts/lector_etiquetas.py` desde la terminal para completar la autorización OAuth en el navegador. |
+| **Alerta: «Sin conexión a Google/IA» (código `22`)** o `Unable to find the server at gmail.googleapis.com` | El PC no tiene internet, o la VPN, el proxy o el firewall bloquean `*.googleapis.com`. | No se perdió nada: los correos siguen pendientes. Corre `.venv\Scripts\python.exe scripts\diagnostico.py`; cuando salga `[OK] Internet`, pulsa **Ciclo completo** en el Dashboard o espera el próximo ciclo. |
 | **El navegador de Lupe indica que el perfil está ocupado (código `21`)** | Otro proceso o ventana de Chromium quedó abierto usando `LUPE_PROFILE_DIR`. | Cierra cualquier ventana colgada de Chromium de Lupe o espera a que termine el paso en curso. |
 | **No se puede cambiar entre `Borrador` y `Enviar` en el Dashboard** | Hay un ciclo en ejecución actualmente. | Pausa el servicio primero desde el Dashboard (o espera a que termine el ciclo actual) para cambiar el modo de envío. |

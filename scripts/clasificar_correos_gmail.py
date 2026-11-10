@@ -11,7 +11,7 @@ try:
 except ModuleNotFoundError:
     from agentes.agente_clasificador import clasificar_correo
 from gmail_cuerpo import extraer_contenido
-from flow_control import DetenerFlujo, comprobar_detener
+from flow_control import DetenerFlujo, comprobar_detener, salir_por_red
 from config import (
     CORREOS_REVISION_MANUAL,
     DOMINIOS_REVISION_MANUAL,
@@ -25,7 +25,9 @@ from config import (
     IA_PROVIDER,
 )
 import logging
-from utils.logger import log_caso, obtener_log, resumen
+from app.alertas import alertar
+from utils.exceptions import es_infraestructura
+from utils.logger import log_caso, obtener_log, resumen, resumir_error
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
 log = obtener_log("clasificar")
@@ -541,6 +543,8 @@ def clasificar_correos():
                     resultado_ia, f"{asunto}\n{cuerpo}\n{adjuntos}", remitente
                 )
             except Exception as error:
+                if es_infraestructura(error):
+                    raise
                 log_caso(log, correo_peticionario).warning("IA no disponible: %s", error)
                 resultado_ia = {"categorias": [], "confianza": 0, "resumen": ""}
                 categorias = []
@@ -567,6 +571,21 @@ def clasificar_correos():
             if etiqueta != LABEL_MANUAL:
                 contadores["completados"] += 1
         except Exception as error:
+            if es_infraestructura(error):
+                contadores["procesados"] -= 1
+                contadores["pausa_infra"] = len(mensajes) - contadores["procesados"]
+                detalle = resumir_error(error)
+                log.warning(
+                    "Clasificar en pausa por infraestructura; %d correo(s) siguen en la bandeja: %s",
+                    contadores["pausa_infra"],
+                    detalle,
+                )
+                alertar(
+                    "clasificar_infra",
+                    "Clasificar pausado por infraestructura",
+                    f"{detalle}. Los correos se reintentarán en la siguiente ronda.",
+                )
+                break
             contadores["errores"] += 1
             log.error("No se pudo clasificar el correo %s; queda en la bandeja para la siguiente ronda: %s", mensaje["id"], error)
 
@@ -581,3 +600,7 @@ if __name__ == "__main__":
         clasificar_correos()
     except DetenerFlujo:
         pass
+    except Exception as error:
+        if es_infraestructura(error):
+            salir_por_red(error)
+        raise

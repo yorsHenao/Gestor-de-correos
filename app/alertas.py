@@ -22,7 +22,9 @@ TIPOS = {
     "entes_revision": "Caso de Entes a revisión manual",
     "entes_pausa": "Entes pausado en esta ronda",
     "entes_infra": "Entes pausado por infraestructura",
-    "rt_infra": "Paso RT pausado por la IA",
+    "rt_infra": "Paso RT pausado por infraestructura",
+    "clasificar_infra": "Clasificar pausado por infraestructura",
+    "sin_red": "Sin conexión a Google/IA",
     "servicio": "Servicio Proyecto E",
 }
 

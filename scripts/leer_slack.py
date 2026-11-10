@@ -13,7 +13,7 @@ from enviar_correo import enviar_correo, enviar_cuenta_habilitada
 from generar_borrador import generar_borrador
 from flow_control import DetenerFlujo, comprobar_detener
 from lupe_navegador import SesionLupe, salir_por_lupe
-from utils.exceptions import LupeOcupado, LupeSesionRequerida
+from utils.exceptions import LupeOcupado, LupeSesionRequerida, es_infraestructura
 import storage
 import requests
 from config import CONTROL_CALIDAD, SLACK_BOT_TOKEN, SLACK_REVIEW_CHANNEL_ID
@@ -125,6 +125,8 @@ def _es_falla_temporal(error):
         return getattr(error.resp, "status", None) in _ESTADOS_HTTP_TEMPORALES
     if isinstance(error, (FileNotFoundError, PermissionError)):
         return False
+    if es_infraestructura(error):
+        return True
     return isinstance(error, (
         httplib2.ServerNotFoundError,
         requests.ConnectionError,

@@ -2,8 +2,8 @@
 
 import sys
 
-from flow_control import DetenerFlujo
-from utils.exceptions import LupeOcupado, LupeSesionRequerida
+from flow_control import DetenerFlujo, salir_por_red
+from utils.exceptions import LupeOcupado, LupeSesionRequerida, es_infraestructura
 
 
 class AgenteRTS:
@@ -33,6 +33,10 @@ if __name__ == "__main__":
         from lupe_navegador import salir_por_lupe
 
         salir_por_lupe(error)
+    except Exception as error:
+        if es_infraestructura(error):
+            salir_por_red(error)
+        raise
     else:
         if isinstance(resultado, int) and resultado:
             sys.exit(1)

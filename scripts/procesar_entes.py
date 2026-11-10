@@ -26,7 +26,7 @@ from entes import formulario, hoja
 from entes.correo import correo_agente, leer_mensaje, listar_ids_entes
 from entes.imagenes import completar_con_imagenes
 from entes.lupe import consultar_cuenta
-from flow_control import DetenerFlujo, comprobar_detener
+from flow_control import DetenerFlujo, comprobar_detener, salir_por_red
 from gmail_cuerpo import bytes_parte
 from lupe_navegador import SesionLupe, salir_por_lupe
 from utils.exceptions import (
@@ -414,3 +414,7 @@ if __name__ == "__main__":
     except DetenerFlujo as error:
         log.warning("Paso detenido: %s", error)
         sys.exit(0)
+    except Exception as error:
+        if es_infraestructura(error):
+            salir_por_red(error)
+        raise
