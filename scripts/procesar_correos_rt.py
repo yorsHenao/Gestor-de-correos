@@ -7,9 +7,8 @@ import storage
 BASE_DIR = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent.parent
 load_dotenv(BASE_DIR / ".env")
 from email.utils import parseaddr
-from googleapiclient.discovery import build
 from app.alertas import alertar
-from autenticar import autenticar
+from autenticar import autenticar, servicio_google
 from agentes.agente_extractor_rt import AgenteExtractorRT
 from consultar_lupe import consultar_lupe
 from clasificar_correos_gmail import (
@@ -28,7 +27,7 @@ from entes.correo import _fecha_peticion
 from gmail_cuerpo import extraer_contenido, mensaje_tiene_pdf_o_word
 from flow_control import DetenerFlujo, comprobar_detener, salir_por_red
 from lupe_navegador import SesionLupe, salir_por_lupe
-from utils.exceptions import LupeOcupado, LupeSesionRequerida, es_infraestructura
+from utils.exceptions import LupeOcupado, LupeSesionRequerida, es_falla_de_red, es_infraestructura
 from utils.logger import log_caso, obtener_log, resumen, resumir_error
 import logging
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
@@ -224,9 +223,7 @@ def _procesar_cola(lupe):
     extractor = AgenteExtractorRT()
     errores = 0
     creds = autenticar()
-    servicio = build(
-        "gmail", "v1", credentials=creds
-    )
+    servicio = servicio_google("gmail", "v1", creds)
 
     resultado = (
         servicio.users()
@@ -520,6 +517,6 @@ if __name__ == "__main__":
     except (LupeSesionRequerida, LupeOcupado) as error:
         salir_por_lupe(error)
     except Exception as error:
-        if es_infraestructura(error):
+        if es_falla_de_red(error):
             salir_por_red(error)
         raise

@@ -14,6 +14,7 @@ from config import (
     GROQ_MODEL,
     IA_PROVIDER,
 )
+from utils.exceptions import es_falla_de_red
 from utils.logger import obtener_log, segundos_reintento
 
 log = obtener_log()
@@ -108,9 +109,15 @@ def llamar_json(prompt, system, operacion="IA", anunciar=True):
                     return _llamar_gemini(prompt, system)
                 return _llamar_groq(prompt, system)
             except Exception as error:
-                if not _codigo_limite(error) or intento == len(_ESPERAS_LIMITE):
+                sin_conexion = es_falla_de_red(error)
+                if not (sin_conexion or _codigo_limite(error)) or intento == len(_ESPERAS_LIMITE):
                     errores.append(f"{proveedor}: {error}")
                     break
+                if sin_conexion:
+                    espera = _ESPERAS_LIMITE[intento]
+                    log.info("IA %s sin conexión; reintento en %.1f s", proveedor.title(), espera)
+                    time.sleep(espera)
+                    continue
                 espera = _espera_limite(error, intento)
                 if espera > _TOPE_ESPERA:
                     errores.append(f"{proveedor}: {error}")

@@ -5,8 +5,7 @@ from datetime import date, datetime, timedelta
 from email.utils import parseaddr
 from pathlib import Path
 
-from autenticar import autenticar
-from googleapiclient.discovery import build
+from autenticar import servicio_google
 from config import (
     CORREOS_REVISION_MANUAL,
     DRIVE_SHEETS_ID,
@@ -58,7 +57,7 @@ def _correo_escrito_en_sheet(valor):
 
 
 def _sheets():
-    return build("sheets", "v4", credentials=autenticar())
+    return servicio_google("sheets", "v4")
 
 
 def leer_rango(spreadsheet_id, rango):
@@ -489,7 +488,7 @@ def guardar_fila(spreadsheet_id, fila, columna_clave="A", ultima_columna="G", en
 
 
 def _gmail():
-    return build("gmail", "v1", credentials=autenticar())
+    return servicio_google("gmail", "v1")
 
 
 def marcar_leido(mensaje_id, servicio=None):

@@ -1,9 +1,8 @@
-from autenticar import autenticar
-from googleapiclient.discovery import build
+from autenticar import autenticar, servicio_google
 
 if __name__ == "__main__":
     creds = autenticar()
-    servicio = build("gmail", "v1", credentials=creds)
+    servicio = servicio_google("gmail", "v1", creds)
     etiquetas = servicio.users().labels().list(userId="me").execute()
     buscar = ("eliminar", "deuda", "rt")
     print("Etiquetas del buzón (nombre → id):\n")

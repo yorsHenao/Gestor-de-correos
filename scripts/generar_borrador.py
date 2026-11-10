@@ -3,10 +3,9 @@ import json
 from datetime import date
 import locale
 
-from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-from autenticar import autenticar
+from autenticar import autenticar, servicio_google
 import storage
 from pathlib import Path
 from config import (
@@ -183,8 +182,8 @@ def generar_borrador(ruta_caso, formato="bloqueado", foto_bytes=None):
     informacion = storage.leer_caso(ruta_caso)
 
     creds = autenticar()
-    drive = build("drive", "v3", credentials=creds)
-    docs = build("docs", "v1", credentials=creds)
+    drive = servicio_google("drive", "v3", creds)
+    docs = servicio_google("docs", "v1", creds)
 
     nombre_rt = informacion["lupe"]["nombre"].title()
     nombre_peticionario = _nombre_peticionario(informacion, nombre_rt)

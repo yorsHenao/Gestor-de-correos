@@ -8,13 +8,11 @@ for ruta in (str(SCRIPTS), str(ROOT)):
     if ruta not in sys.path:
         sys.path.insert(0, ruta)
 
-from googleapiclient.discovery import build
-
 import storage
 from agentes.agente_entes import AgenteEntes
 from app import registro
 from app.alertas import alertar
-from autenticar import autenticar
+from autenticar import servicio_google
 from config import (
     ENTES_MAX_CORREOS,
     ENTES_MAX_FALLOS_RONDA,
@@ -33,6 +31,7 @@ from utils.exceptions import (
     ErrorInfraestructura,
     LupeOcupado,
     LupeSesionRequerida,
+    es_falla_de_red,
     es_infraestructura,
 )
 from utils.logger import (
@@ -56,7 +55,7 @@ EXTRANJERO = "extranjero"
 
 
 def procesar_entes():
-    servicio = build("gmail", "v1", credentials=autenticar())
+    servicio = servicio_google("gmail", "v1")
     ids = listar_ids_entes(servicio, ENTES_MAX_CORREOS)
     log.info("Cola entes: %d correo(s) sin leer", len(ids))
     contadores = {
@@ -415,6 +414,6 @@ if __name__ == "__main__":
         log.warning("Paso detenido: %s", error)
         sys.exit(0)
     except Exception as error:
-        if es_infraestructura(error):
+        if es_falla_de_red(error):
             salir_por_red(error)
         raise

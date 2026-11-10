@@ -3,7 +3,7 @@
 import sys
 
 from flow_control import DetenerFlujo, salir_por_red
-from utils.exceptions import LupeOcupado, LupeSesionRequerida, es_infraestructura
+from utils.exceptions import LupeOcupado, LupeSesionRequerida, es_falla_de_red
 
 
 class AgenteRTS:
@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
         salir_por_lupe(error)
     except Exception as error:
-        if es_infraestructura(error):
+        if es_falla_de_red(error):
             salir_por_red(error)
         raise
     else:

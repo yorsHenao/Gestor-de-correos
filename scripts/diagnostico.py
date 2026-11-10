@@ -50,6 +50,17 @@ def _codigo(error):
     return getattr(resp, "status", None)
 
 
+def _sin_conexion(inf, que, error):
+    """Un fallo de red o DNS no se arregla reinstalando: aviso y repetir."""
+    from utils.exceptions import es_falla_de_red
+
+    if not es_falla_de_red(error):
+        return False
+    inf.aviso(f"{que}: sin conexión momentánea (red o DNS)",
+              "Repite el diagnóstico; si se repite, revisa la red o la VPN")
+    return True
+
+
 def revisar_internet(inf, host="www.googleapis.com"):
     try:
         socket.create_connection((host, 443), timeout=5).close()
@@ -101,6 +112,8 @@ def cargar_token(inf, config):
         try:
             creds.refresh(Request())
         except Exception as error:
+            if _sin_conexion(inf, "Token de Google", error):
+                return None
             inf.falta(f"El token de Google no se pudo renovar ({type(error).__name__})",
                       "Si hay internet, el token fue revocado: " + REINSTALAR)
             return None
@@ -114,7 +127,8 @@ def revisar_gmail(inf, gmail, config):
     try:
         lista = gmail.users().labels().list(userId="me").execute().get("labels", [])
     except Exception as error:
-        inf.falta(f"Gmail no responde ({_codigo(error) or error})")
+        if not _sin_conexion(inf, "Gmail", error):
+            inf.falta(f"Gmail no responde ({_codigo(error) or error})")
         return
     ids = {e["id"]: e["name"] for e in lista}
     malas = [v for v in recursos.etiquetas() if getattr(config, v, "") not in ids]
@@ -147,7 +161,8 @@ def revisar_drive(inf, drive, config):
             if archivo(valor)["mimeType"] != recursos.MIME_CARPETA:
                 raise LookupError("no es una carpeta")
         except Exception as error:
-            inf.falta(f"Carpeta {variable} no accesible ({_codigo(error) or error})")
+            if not _sin_conexion(inf, f"Carpeta {variable}", error):
+                inf.falta(f"Carpeta {variable} no accesible ({_codigo(error) or error})")
             bien = False
     if bien:
         inf.ok("Carpetas de Drive")
@@ -166,7 +181,8 @@ def revisar_hojas(inf, sheets, config):
             fila = sheets.spreadsheets().values().get(
                 spreadsheetId=hoja, range=f"A1:{ultima}1").execute().get("values", [])
         except Exception as error:
-            inf.falta(f"Hoja {nombre} no accesible ({_codigo(error) or error})")
+            if not _sin_conexion(inf, f"Hoja {nombre}", error):
+                inf.falta(f"Hoja {nombre} no accesible ({_codigo(error) or error})")
             continue
         actual = [str(v).strip() for v in (fila[0] if fila else [])]
         if actual == encabezados:
@@ -208,7 +224,8 @@ def revisar_plantillas(inf, docs, config):
         try:
             texto = _texto_doc(docs.documents().get(documentId=doc_id).execute())
         except Exception as error:
-            inf.falta(f"Plantilla {variable} no accesible o no es Google Docs ({_codigo(error) or error})")
+            if not _sin_conexion(inf, f"Plantilla {variable}", error):
+                inf.falta(f"Plantilla {variable} no accesible o no es Google Docs ({_codigo(error) or error})")
             bien = False
             continue
         faltan = [m for m in marcadores if m not in texto]
@@ -245,6 +262,10 @@ def revisar_slack(inf, config, cliente=None):
 
 
 def _motivo_ia(error):
+    from utils.exceptions import es_falla_de_red
+
+    if es_falla_de_red(error):
+        return "aviso", "sin conexión momentánea (red o DNS); repite el diagnóstico"
     codigo = _codigo(error)
     texto = str(error).lower()
     if codigo in (401, 403) or "api_key_invalid" in texto or "invalid api key" in texto:

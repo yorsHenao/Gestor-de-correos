@@ -108,15 +108,14 @@ def _gmail(titulo, detalle):
     destino = (config.ALERTAS_EMAIL or "").strip()
     if not destino:
         raise RuntimeError("ALERTAS_EMAIL no está en el .env")
-    from autenticar import autenticar
-    from googleapiclient.discovery import build
+    from autenticar import servicio_google
 
     cuerpo = f"{detalle or titulo}\n\nDashboard: {config.DASHBOARD_URL}"
     mensaje = MIMEText(cuerpo, "plain", "utf-8")
     mensaje["to"] = destino
     mensaje["subject"] = f"[Proyecto E] {titulo}"
     raw = base64.urlsafe_b64encode(mensaje.as_bytes()).decode()
-    servicio = build("gmail", "v1", credentials=autenticar())
+    servicio = servicio_google("gmail", "v1")
     servicio.users().messages().send(userId="me", body={"raw": raw}).execute()
 
 

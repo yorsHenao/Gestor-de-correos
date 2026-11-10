@@ -4,8 +4,7 @@ from unicodedata import normalize
 from email.utils import parseaddr
 from pathlib import Path
 from dotenv import load_dotenv
-from googleapiclient.discovery import build
-from autenticar import autenticar
+from autenticar import autenticar, servicio_google
 try:
     from scripts.agentes.agente_clasificador import clasificar_correo
 except ModuleNotFoundError:
@@ -26,7 +25,7 @@ from config import (
 )
 import logging
 from app.alertas import alertar
-from utils.exceptions import es_infraestructura
+from utils.exceptions import es_falla_de_red, es_infraestructura
 from utils.logger import log_caso, obtener_log, resumen, resumir_error
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
@@ -434,7 +433,7 @@ def _decidir_etiqueta(resultado, texto="", remitente=""):
 
 def clasificar_correos():
     creds    = autenticar()
-    servicio = build("gmail", "v1", credentials=creds)
+    servicio = servicio_google("gmail", "v1", creds)
 
     resultado = servicio.users().messages().list(
         userId="me",
@@ -601,6 +600,6 @@ if __name__ == "__main__":
     except DetenerFlujo:
         pass
     except Exception as error:
-        if es_infraestructura(error):
+        if es_falla_de_red(error):
             salir_por_red(error)
         raise

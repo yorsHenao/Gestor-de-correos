@@ -3,8 +3,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from email.mime.image import MIMEImage
-from googleapiclient.discovery import build
-from autenticar import autenticar
+from autenticar import autenticar, servicio_google
 import storage
 from config import CONTROL_CALIDAD, GMAIL_REPLY_TO
 from utils.logger import obtener_log
@@ -106,8 +105,7 @@ def enviar_correo_no_encontrado(ruta_caso, dato_busqueda):
     nombre = informacion["correo"].get("nombre_peticionario") or informacion["correo"].get("remitente_nombre", "")
     correo = informacion["correo"].get("correo_peticionario") or ""
 
-    creds = autenticar()
-    servicio = build("gmail", "v1", credentials=creds)
+    servicio = servicio_google("gmail", "v1")
 
     msg = _construir_mensaje(
         asunto,
@@ -164,7 +162,7 @@ def enviar_cuenta_habilitada(ruta_caso, foto_bytes, crear_borrador=False):
     remitente_email = informacion["correo"].get("correo_peticionario") or ""
     correo_rt = informacion.get("lupe", {}).get("correo") or informacion["correo"].get("correo_rt", "")
 
-    servicio = build("gmail", "v1", credentials=autenticar())
+    servicio = servicio_google("gmail", "v1")
     usar_borrador = _modo_borrador(crear_borrador)
     entregar = _crear_borrador if usar_borrador else _enviar
 
@@ -233,8 +231,8 @@ def enviar_correo(ruta_caso, crear_borrador=False):
     remitente_email = informacion["correo"].get("correo_peticionario") or ""
 
     creds = autenticar()
-    servicio = build("gmail", "v1", credentials=creds)
-    drive = build("drive", "v3", credentials=creds)
+    servicio = servicio_google("gmail", "v1", creds)
+    drive = servicio_google("drive", "v3", creds)
 
     entregar = _crear_borrador if _modo_borrador(crear_borrador) else _enviar
     nombre_titulo = nombre_rt if tipo_caso == 1 else nombre_peticionario
