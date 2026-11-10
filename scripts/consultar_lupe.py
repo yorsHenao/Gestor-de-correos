@@ -45,32 +45,45 @@ def _click_filtro_busqueda(page, clave_filtro):
     raise ultimo_error or TimeoutError(f"Filtro no encontrado: {etiquetas}")
 
 
-def _capturar_perfil(page, ruta_caso, aviso="Captura del perfil tomada", permitir_cabecera=False):
+_SELECTOR_TARJETA = "div.row.information-card.white"
+_SELECTOR_FOTO = "img.circle.responsive-img.ng-star-inserted"
+_RECORTE_TARJETA = {"width": 450, "height": 270}
+# Esquina de la tarjeta en «Información general» con la ventana de 1280x720 (medida en Lupe).
+_POSICION_TARJETA = {"x": 96.25, "y": 209.5}
+
+
+def _abrir_informacion_general(page):
+    """Lupe reabre el perfil en la última sección vista (p. ej. Reportes), donde no está la tarjeta."""
+    try:
+        icono = page.locator("img[alt='Información general']").first
+        if icono.is_visible():
+            icono.click()
+    except Exception:
+        pass
+    # El tooltip del icono tapa la esquina de la tarjeta.
+    page.mouse.move(700, 700)
+
+
+def _capturar_perfil(page, ruta_caso, aviso="Captura del perfil tomada", permitir_sin_tarjeta=False):
+    _abrir_informacion_general(page)
     time.sleep(3)
-    if page.locator("div.row.information-card.white").count():
-        box = page.locator("div.row.information-card.white").first.bounding_box()
-    else:
+    try:
+        page.wait_for_selector(_SELECTOR_FOTO, timeout=15000)
+        tarjeta = page.locator(_SELECTOR_TARJETA).first
+        tarjeta.wait_for(state="visible", timeout=10000)
+        box = tarjeta.bounding_box()
+    except Exception:
         box = None
     if box:
-        screenshot_bytes = page.screenshot(clip={
-            "x": box["x"],
-            "y": box["y"],
-            "width": 450,
-            "height": 270
-        })
-    elif permitir_cabecera and _leer_estado_global(page) == "Habilitado":
-        cajas = [_campo_cabecera(page, etiqueta).bounding_box() for etiqueta in ("ID", "Estado")]
-        if any(not caja for caja in cajas):
-            raise TimeoutError("Lupe no mostró la cabecera necesaria para la evidencia")
-        x = min(caja["x"] for caja in cajas)
-        y = min(caja["y"] for caja in cajas)
-        ancho = max(caja["x"] + caja["width"] for caja in cajas) - x
-        alto = max(caja["y"] + caja["height"] for caja in cajas) - y
-        if not (x >= 0 and y >= 0 and 0 < ancho <= 450 and 0 < alto <= 270):
-            raise TimeoutError("Lupe no permite un recorte seguro de ID y Estado")
-        screenshot_bytes = page.screenshot(clip={"x": x, "y": y, "width": ancho, "height": alto})
+        origen = {"x": box["x"], "y": box["y"]}
+    elif permitir_sin_tarjeta:
+        log_caso(log, ruta_caso).warning(
+            "La tarjeta del perfil no cargó; se recorta la zona habitual de la tarjeta para que QA la revise"
+        )
+        origen = _POSICION_TARJETA
     else:
         raise TimeoutError("Lupe no mostró la tarjeta del perfil para la evidencia")
+    screenshot_bytes = page.screenshot(clip={**origen, **_RECORTE_TARJETA})
     if not screenshot_bytes:
         raise TimeoutError("Lupe no entregó la captura del perfil")
     if aviso:
@@ -397,7 +410,7 @@ def _verificar_habilitado(ruta_caso, id_rt, page):
                 page,
                 ruta_caso,
                 aviso="Cuenta Habilitada tras OPS: captura tomada",
-                permitir_cabecera=True,
+                permitir_sin_tarjeta=True,
             )
             informacion = storage.leer_caso(ruta_caso)
             informacion["lupe"] = informacion.get("lupe") or {}
