@@ -348,6 +348,7 @@ def _revisar_pendientes(lupe):
                 contadores["esperando_ops"] += 1
                 clog.info("Sigue pendiente: la cuenta aún está bloqueada en Lupe")
                 continue
+            informacion = storage.leer_caso(archivo)
             informacion["slack"]["decision"] = decision
         else:
             foto_bytes = _descargar_primera_imagen(mensajes, clog)

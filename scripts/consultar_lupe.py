@@ -358,14 +358,33 @@ def _campo_cabecera(page, etiqueta):
     ).first
 
 
+_ESTADOS = {e.lower(): e for e in ("Habilitado", "Inhabilitado", "Bloqueado", "Suspendido")}
+
+
 def _leer_estado_global(page):
     campo = _campo_cabecera(page, "Estado")
     campo.wait_for(state="visible", timeout=10000)
     texto = re.sub(r"^\s*Estado\s*:\s*", "", campo.inner_text(timeout=10000), flags=re.I).strip()
-    estados = {e.lower(): e for e in ("Habilitado", "Inhabilitado", "Bloqueado", "Suspendido")}
-    if texto.lower() not in estados:
+    if texto.lower() not in _ESTADOS:
         raise TimeoutError("Lupe no confirmó el estado global de la cuenta")
-    return estados[texto.lower()]
+    return _ESTADOS[texto.lower()]
+
+
+def _campo_tarjeta(page, etiqueta):
+    rotulo = page.locator("label", has_text=re.compile(rf"^\s*{re.escape(etiqueta)}\s*$", re.I))
+    return page.locator("#information li").filter(has=rotulo).filter(visible=True).first
+
+
+def _leer_estado_tarjeta(page, id_rt):
+    """Estado de «Información general». Lupe puede mostrar otro distinto en la cabecera."""
+    campo_id = _campo_tarjeta(page, "Id")
+    campo_id.wait_for(state="visible", timeout=15000)
+    if campo_id.locator("span").first.inner_text(timeout=10000).strip() != str(id_rt):
+        raise TimeoutError("La tarjeta de Lupe todavía muestra otro perfil")
+    texto = _campo_tarjeta(page, "Estado").locator("span").first.inner_text(timeout=10000).strip()
+    if texto.lower() not in _ESTADOS:
+        raise TimeoutError("Lupe no confirmó el estado de la tarjeta")
+    return _ESTADOS[texto.lower()]
 
 
 def _verificar_habilitado(ruta_caso, id_rt, page):
@@ -405,20 +424,35 @@ def _verificar_habilitado(ruta_caso, id_rt, page):
             )
             return False, None
 
-        if estado == "Habilitado":
-            foto_bytes = _capturar_perfil(
-                page,
-                ruta_caso,
-                aviso="Cuenta Habilitada tras OPS: captura tomada",
-                permitir_sin_tarjeta=True,
-            )
-            informacion = storage.leer_caso(ruta_caso)
-            informacion["lupe"] = informacion.get("lupe") or {}
-            informacion["lupe"]["estado"] = estado
-            storage.guardar_caso(ruta_caso, informacion)
-            return True, foto_bytes
+        if estado != "Habilitado":
+            return False, None
 
-        return False, None
+        _abrir_informacion_general(page)
+        try:
+            estado_tarjeta = _leer_estado_tarjeta(page, id_rt)
+        except Exception as error:
+            log_caso(log, ruta_caso).warning(
+                "Lupe: la cabecera dice Habilitado pero no se pudo leer la tarjeta (%s); sigue pendiente",
+                error,
+            )
+            return None, None
+        if estado_tarjeta != "Habilitado":
+            log_caso(log, ruta_caso).warning(
+                "Lupe: cabecera Habilitado, tarjeta %s; no se responde como habilitada", estado_tarjeta
+            )
+            return False, None
+
+        foto_bytes = _capturar_perfil(
+            page,
+            ruta_caso,
+            aviso="Cuenta Habilitada tras OPS: captura tomada",
+            permitir_sin_tarjeta=True,
+        )
+        informacion = storage.leer_caso(ruta_caso)
+        informacion["lupe"] = informacion.get("lupe") or {}
+        informacion["lupe"]["estado"] = estado
+        storage.guardar_caso(ruta_caso, informacion)
+        return True, foto_bytes
     except (DetenerFlujo, LupeSesionRequerida, LupeOcupado):
         raise
     except Exception:
